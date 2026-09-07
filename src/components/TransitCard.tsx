@@ -1,0 +1,131 @@
+import React, { useState, useMemo } from 'react';
+import { Heart } from 'lucide-react';
+import { TransitCar } from '../types';
+import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl } from '../utils/imageFallback';
+
+interface TransitCardProps {
+  car: TransitCar;
+  onViewDetails: (car: TransitCar) => void;
+  isFavorite: boolean;
+  onToggleFavorite: (carId: string) => void;
+  priority?: boolean;
+}
+
+export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
+  car,
+  onViewDetails,
+  isFavorite,
+  onToggleFavorite,
+  priority = false
+}) {
+  const [imgError, setImgError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Safe property extraction
+  const safeTitle = car?.title || `${car?.brand || 'Ford'} ${car?.model || 'Transit'}`;
+  const safeYear = car?.year || '';
+  const safePrice = car?.price || 0;
+  const safeMileage = car?.mileage || 0;
+  const safeEngine = (car?.engine || '2.2').split(' ')[0];
+  const safeLocation = car?.city || car?.location || 'Bakı';
+  const safeBaseLength = car?.baseLength || '';
+
+  const imageSrc = useMemo(() => imgError 
+    ? DEFAULT_VEHICLE_PLACEHOLDER 
+    : getValidImageUrl(car?.primaryImage), [imgError, car]);
+
+  return (
+    <div 
+      className="bg-white rounded-lg sm:rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-md transition-all duration-200 flex flex-col overflow-hidden group hover:border-slate-300 cursor-pointer"
+      onClick={() => onViewDetails(car)}
+    >
+      {/* Top Image Section (Turbo.az Style 4:3 Aspect, Clean Slate Base, Full Cover) */}
+      <div 
+        className="relative aspect-[4/3] bg-slate-100 overflow-hidden flex items-center justify-center"
+        title={`${safeTitle} - Ətraflı baxmaq üçün klikləyin`}
+      >
+        {/* Shimmer placeholder while image is loading */}
+        {!isLoaded && (
+          <div className="absolute inset-0 bg-slate-100 overflow-hidden pointer-events-none z-0">
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-100 via-slate-200/80 to-slate-100 animate-shimmer" />
+          </div>
+        )}
+
+        <img
+          src={imageSrc}
+          alt={safeTitle}
+          referrerPolicy="no-referrer"
+          onLoad={() => setIsLoaded(true)}
+          onError={() => {
+            setImgError(true);
+            setIsLoaded(true);
+          }}
+          className={`w-full h-full object-cover object-center group-hover:scale-105 transition-all duration-300 relative z-[1] ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'auto'}
+        />
+
+        {/* Favorite Button (Heart) */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (car?.id) onToggleFavorite(car.id);
+          }}
+          className={`absolute top-1.5 right-1.5 p-1.5 rounded-full backdrop-blur-md transition-transform hover:scale-110 active:scale-95 z-10 cursor-pointer ${
+            isFavorite 
+              ? 'bg-red-600 text-white shadow-sm' 
+              : 'bg-black/35 text-white hover:text-red-400 hover:bg-black/60'
+          }`}
+          title={isFavorite ? 'Seçilmişlərdən çıxar' : 'Seçilmişlərə əlavə et'}
+          aria-label="Seçilmişlərə əlavə et"
+        >
+          <Heart className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
+        </button>
+
+        {/* Compact Base Length Pill */}
+        {safeBaseLength && safeBaseLength !== 'Hamısı' && (
+          <div className="absolute bottom-1.5 left-1.5 bg-slate-900/80 backdrop-blur-xs text-slate-100 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded border border-slate-700/60 pointer-events-none z-10">
+            {safeBaseLength}
+          </div>
+        )}
+      </div>
+
+      {/* Turbo.az Style Compact Card Body */}
+      <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between space-y-1">
+        
+        <div className="space-y-0.5 min-w-0">
+          {/* Price - Bold & Clear (Turbo.az style: e.g. 25 500 AZN) */}
+          <div className="flex items-baseline justify-between">
+            <span className="text-[15px] sm:text-base font-bold text-slate-900 tracking-tight">
+              {safePrice.toLocaleString()} <span className="text-xs sm:text-[13px] font-bold text-slate-800">AZN</span>
+            </span>
+          </div>
+
+          {/* Car Title / Model - Turbo.az style */}
+          <h3 
+            className="font-normal text-xs sm:text-[13px] text-slate-800 group-hover:text-blue-600 transition-colors truncate leading-tight"
+            title={safeTitle}
+          >
+            {safeTitle}
+          </h3>
+
+          {/* Specifications Row (Year, Engine, Mileage) - Pure black color */}
+          <p className="text-[11px] sm:text-xs text-black font-normal truncate leading-tight">
+            {safeYear ? `${safeYear}, ` : ''}{safeEngine ? `${safeEngine} L, ` : ''}{safeMileage.toLocaleString()} km
+          </p>
+        </div>
+
+        {/* Bottom City / Date */}
+        <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400">
+          <span className="truncate text-slate-400 font-normal">
+            {safeLocation}
+          </span>
+        </div>
+
+      </div>
+    </div>
+  );
+});
