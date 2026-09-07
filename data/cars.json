@@ -1,62 +1,5 @@
 [
   {
-    "id": "car-1787234290103",
-    "title": "Ford Tranzit",
-    "brand": "Ford",
-    "make": "Ford",
-    "model": "Transit",
-    "city": "Bakı, Yeni Günəşli",
-    "location": "Bakı, Yeni Günəşli",
-    "year": 2011,
-    "price": 29000,
-    "mileage": 215000,
-    "engine": "2.2 L",
-    "hp": 130,
-    "transmission": "6-Pilləli Mexanika",
-    "wheelDrive": "Arxa çəkən (RWD)",
-    "bodyType": "Yük furqonu",
-    "baseLength": "3.30 m",
-    "roofHeight": "Orta dam",
-    "color": "Ağ",
-    "fuelType": "Dizel",
-    "condition": "Vuruğu yoxdur, rənglənməyib",
-    "vinCode": "WF0XXXTTFX81211",
-    "primaryImage": "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293817267_image11.jpeg",
-    "images": [
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293817267_image11.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293818090_image10.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293824929_image1.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293823245_image2.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293822521_image3.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293820379_image7.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293810919_image21.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293811794_image22.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293821112_image6.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293814951_image16.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293821829_image4.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293815800_image12.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293813481_image18.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293816549_image14.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293824229_image0.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293812705_image20.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293814170_image15.jpeg",
-      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293819694_image9.jpeg"
-    ],
-    "description": "Yeni gətirilib",
-    "features": [
-      "Kondisioner",
-      "Mərkəzi qapanma",
-      "Arxa görüntü kamerası"
-    ],
-    "statusBadges": [
-      "Vuruqsuz",
-      "Gömrük olunub",
-      "Zəmanətli"
-    ],
-    "isFeatured": true,
-    "status": "active"
-  },
-  {
     "id": "car-1787228116616",
     "title": "Mercedes Spirinter",
     "brand": "Mercedes-Benz",
@@ -97,7 +40,7 @@
       "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787228080522_image10.jpeg",
       "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787228087223_image0.jpeg"
     ],
-    "description": "Idealdir",
+    "description": "Idealdirsüa",
     "features": [
       "Kondisioner",
       "ABS / ESP təhlükəsizlik",
@@ -109,6 +52,102 @@
       "Zəmanətli"
     ],
     "isFeatured": true,
+    "status": "active"
+  },
+  {
+    "id": "car-1788006552051",
+    "title": "Ramiq",
+    "brand": "Ford",
+    "make": "Ford",
+    "model": "Transit",
+    "city": "Bakı",
+    "location": "Bakı",
+    "year": 2012,
+    "price": 18500,
+    "mileage": 215000,
+    "engine": "2.2 TDCi Euro 5",
+    "hp": 125,
+    "transmission": "Mexaniki",
+    "wheelDrive": "Ön çəkən (FWD)",
+    "bodyType": "Yük furqonu",
+    "baseLength": "3.30 m",
+    "roofHeight": "Hündür dam",
+    "color": "Ağ",
+    "fuelType": "Dizel",
+    "condition": "Vuruğu yoxdur, rənglənməyib",
+    "vinCode": "WF0XXXTTFX43907998",
+    "primaryImage": "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1788006535177_1000631747.jpg",
+    "images": [
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1788006535177_1000631747.jpg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1788006545192_1000631748.jpg"
+    ],
+    "description": "Almaniyadan yeni gətirilib, gömrük olunub, texniki saz vəziyyətdədir.",
+    "features": [
+      "Kondisioner"
+    ],
+    "statusBadges": [
+      "Vuruqsuz",
+      "Gömrük olunub",
+      "Zəmanətli"
+    ],
+    "isFeatured": false,
+    "status": "sold"
+  },
+  {
+    "id": "car-1787234290103",
+    "title": "Ford Tranzit",
+    "brand": "Ford",
+    "make": "Ford",
+    "model": "Transit",
+    "city": "Bakı, Yeni Günəşli",
+    "location": "Bakı, Yeni Günəşli",
+    "year": 2011,
+    "price": 29000,
+    "mileage": 215000,
+    "engine": "2.2 L",
+    "hp": 130,
+    "transmission": "6-Pilləli Mexanika",
+    "wheelDrive": "Arxa çəkən (RWD)",
+    "bodyType": "Yük furqonu",
+    "baseLength": "3.30 m",
+    "roofHeight": "Orta dam",
+    "color": "Ağ",
+    "fuelType": "Dizel",
+    "condition": "Vuruğu yoxdur, rənglənməyib",
+    "vinCode": "WF0XXXTTFX40458499",
+    "primaryImage": "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293817267_image11.jpeg",
+    "images": [
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293817267_image11.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293818090_image10.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293824929_image1.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293823245_image2.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293822521_image3.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293820379_image7.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293810919_image21.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293811794_image22.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293821112_image6.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293814951_image16.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293821829_image4.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293815800_image12.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293813481_image18.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293816549_image14.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293824229_image0.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293812705_image20.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293814170_image15.jpeg",
+      "https://ysqnaelzrugbocpwztyc.supabase.co/storage/v1/object/public/car-images/cars/1787293819694_image9.jpeg"
+    ],
+    "description": "Yeni gətirilib",
+    "features": [
+      "Kondisioner",
+      "Mərkəzi qapanma",
+      "Arxa görüntü kamerası"
+    ],
+    "statusBadges": [
+      "Vuruqsuz",
+      "Gömrük olunub",
+      "Zəmanətli"
+    ],
+    "isFeatured": false,
     "status": "active"
   }
 ]
