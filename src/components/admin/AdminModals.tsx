@@ -13,11 +13,7 @@ import {
   Check 
 } from 'lucide-react';
 import { SUPABASE_RLS_SQL } from '../../services/adminAuthService';
-import { 
-  STORAGE_BUCKET_NAME, 
-  DEFAULT_SUPABASE_URL, 
-  DEFAULT_SUPABASE_ANON_KEY 
-} from '../../services/supabaseClientInit';
+import { STORAGE_BUCKET_NAME } from '../../services/supabaseClientInit';
 
 interface SupabaseSettingsModalProps {
   isOpen: boolean;

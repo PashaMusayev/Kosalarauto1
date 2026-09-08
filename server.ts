@@ -194,17 +194,24 @@ function validateAndSanitizeCars(cars: unknown[]): { valid: boolean; error?: str
   return { valid: true, sanitized };
 }
 
+// Normalize Supabase URL helper
+function normalizeSupabaseUrl(url: string): string {
+  if (!url) return '';
+  let cleaned = url.trim().replace(/\/+$/, '');
+  cleaned = cleaned.replace(/\/rest\/v1\/?$/i, '');
+  return cleaned.trim().replace(/\/+$/, '');
+}
+
 // Initialize Supabase Server Client lazily
 let serverSupabase: SupabaseClient | null = null;
-const DEFAULT_SERVER_SUPABASE_URL = 'https://ysqnaelzrugbocpwztyc.supabase.co';
-const DEFAULT_SERVER_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzcW5hZWx6cnVnYm9jcHd6dHljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMDA2ODksImV4cCI6MjEwMjc3NjY4OX0.MTckhAad7LOjaVqhJHyMvGnSvtk7jav_XHvdxPt28GA';
 const STORAGE_BUCKET_NAME = 'car-images';
 
 function getServerSupabase(): SupabaseClient | null {
   if (serverSupabase) return serverSupabase;
-  const sUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SERVER_SUPABASE_URL;
-  const sKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SERVER_SUPABASE_KEY;
-  if (sUrl && sKey) {
+  const rawUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const sUrl = normalizeSupabaseUrl(rawUrl);
+  const sKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  if (sUrl && sKey && (sUrl.startsWith('http://') || sUrl.startsWith('https://')) && sKey.length > 10) {
     try {
       serverSupabase = createClient(sUrl, sKey);
       return serverSupabase;
@@ -362,12 +369,13 @@ async function startServer() {
   // Supabase Config info endpoint
   app.get('/api/supabase-config', (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    const sUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SERVER_SUPABASE_URL;
-    const sKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SERVER_SUPABASE_KEY;
+    const rawUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const sUrl = normalizeSupabaseUrl(rawUrl);
+    const sKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
     res.json({
       supabaseUrl: sUrl,
       supabaseAnonKey: sKey,
-      isConfigured: Boolean(sUrl && sKey),
+      isConfigured: Boolean(sUrl && sKey && (sUrl.startsWith('http://') || sUrl.startsWith('https://')) && sKey.length > 10),
       bucket: STORAGE_BUCKET_NAME,
       table: 'cars'
     });
@@ -903,6 +911,21 @@ async function startServer() {
   if (!configuredAdminPass) {
     console.warn('\x1b[33m%s\x1b[0m', '⚠️  [TƏHLÜKƏSİZLİK XƏBƏRDARLIĞI] ADMIN_PASSWORD və ya KOSALAR_ADMIN_PASS mühit dəyişəni təyin edilməyib!');
     console.warn('\x1b[33m%s\x1b[0m', '   Admin paneli qapalıdır (Fail-Closed). Zəhmət olmasa hosting/server parametrlərində ADMIN_PASSWORD dəyişənini daxil edin.');
+  }
+
+  // Supabase environment variables startup validation
+  const startRawUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const startNormUrl = normalizeSupabaseUrl(startRawUrl);
+  const startKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+  if (!startNormUrl || !startKey) {
+    const missing: string[] = [];
+    if (!startNormUrl) missing.push('SUPABASE_URL (və ya VITE_SUPABASE_URL)');
+    if (!startKey) missing.push('SUPABASE_ANON_KEY (və ya SUPABASE_SERVICE_ROLE_KEY / VITE_SUPABASE_ANON_KEY)');
+    console.warn('\x1b[33m%s\x1b[0m', `⚠️  [SUPABASE XƏBƏRDARLIĞI] Supabase mühit dəyişənləri təyin edilməyib: ${missing.join(', ')}`);
+    console.warn('\x1b[33m%s\x1b[0m', '   Supabase əlaqəsi deaktivdir. Server yerli disk-keş (data/cars.json) rejimində davam edir.');
+  } else {
+    console.log(`✅ Supabase konfiqurasiyası mühit dəyişənlərindən təyin edildi (${startNormUrl})`);
   }
 
   app.listen(PORT, '0.0.0.0', () => {

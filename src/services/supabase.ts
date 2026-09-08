@@ -7,11 +7,10 @@
 
 // 1. Client Initialization & Settings
 export {
-  DEFAULT_SUPABASE_URL,
-  DEFAULT_SUPABASE_ANON_KEY,
   STORAGE_BUCKET_NAME,
   ALT_STORAGE_BUCKET_NAME,
   STORAGE_BUCKETS,
+  normalizeSupabaseUrl,
   getActiveSupabaseConfig,
   saveCustomSupabaseConfig,
   resetCustomSupabaseConfig,

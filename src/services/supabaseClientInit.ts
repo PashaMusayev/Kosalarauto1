@@ -1,13 +1,21 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Real Supabase Credentials & Settings
-export const DEFAULT_SUPABASE_URL = 'https://ysqnaelzrugbocpwztyc.supabase.co';
-export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzcW5hZWx6cnVnYm9jcHd6dHljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMDA2ODksImV4cCI6MjEwMjc3NjY4OX0.MTckhAad7LOjaVqhJHyMvGnSvtk7jav_XHvdxPt28GA';
+// Storage Configuration & Buckets
 export const STORAGE_BUCKET_NAME = 'car-images';
 export const ALT_STORAGE_BUCKET_NAME = 'CAR-IMAGES';
 export const STORAGE_BUCKETS = ['car-images', 'CAR-IMAGES'] as const;
 
-// Get URL and Key (from env or custom override, with auto-healing for stale local keys)
+/**
+ * Normalizes Supabase project URL by removing trailing slashes and /rest/v1 paths
+ */
+export function normalizeSupabaseUrl(url: string): string {
+  if (!url) return '';
+  let cleaned = url.trim().replace(/\/+$/, '');
+  cleaned = cleaned.replace(/\/rest\/v1\/?$/i, '');
+  return cleaned.trim().replace(/\/+$/, '');
+}
+
+// Get URL and Key (from environment variables or user custom override in settings)
 export function getActiveSupabaseConfig(): { url: string; anonKey: string; bucket: string; table: string } {
   let envUrl = '';
   let envKey = '';
@@ -26,26 +34,16 @@ export function getActiveSupabaseConfig(): { url: string; anonKey: string; bucke
     }
   } catch (e) {}
 
-  // Auto-healing: If localStorage contains an old/stale anon key that is not the active valid key, sync to active key
-  if (savedKey && savedKey !== DEFAULT_SUPABASE_ANON_KEY) {
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('supabase_custom_anon_key', DEFAULT_SUPABASE_ANON_KEY);
-      }
-      savedKey = DEFAULT_SUPABASE_ANON_KEY;
-    } catch (e) {}
-  }
-
-  // Validate URL with safe fallback
-  let resolvedUrl = (savedUrl || envUrl || DEFAULT_SUPABASE_URL || '').trim();
+  // Validate and normalize URL (custom override, or environment variable)
+  let resolvedUrl = normalizeSupabaseUrl(savedUrl || envUrl || '');
   if (!resolvedUrl.startsWith('http://') && !resolvedUrl.startsWith('https://')) {
-    resolvedUrl = DEFAULT_SUPABASE_URL;
+    resolvedUrl = '';
   }
 
-  // Validate anon key with safe fallback
-  let resolvedKey = (savedKey || envKey || DEFAULT_SUPABASE_ANON_KEY || '').trim();
-  if (!resolvedKey || resolvedKey.length < 10) {
-    resolvedKey = DEFAULT_SUPABASE_ANON_KEY;
+  // Validate anon key (custom override, or environment variable)
+  let resolvedKey = (savedKey || envKey || '').trim();
+  if (resolvedKey.length < 10) {
+    resolvedKey = '';
   }
 
   return {
@@ -134,42 +132,46 @@ function createSafeFallbackClient(): SupabaseClient {
   } as unknown as SupabaseClient;
 }
 
+let hasWarnedMissingConfig = false;
+
 export function getSupabaseClient(forceNew = false): SupabaseClient {
   const config = getActiveSupabaseConfig();
   if (supabaseInstance && !forceNew && currentKeyUsed === config.anonKey && currentUrlUsed === config.url) {
     return supabaseInstance;
   }
   
-  const targetUrl = (config.url && (config.url.startsWith('http://') || config.url.startsWith('https://'))) 
-    ? config.url 
-    : DEFAULT_SUPABASE_URL;
-  const targetKey = (config.anonKey && config.anonKey.length > 10) 
-    ? config.anonKey 
-    : DEFAULT_SUPABASE_ANON_KEY;
+  const isValidUrl = Boolean(config.url && (config.url.startsWith('http://') || config.url.startsWith('https://')));
+  const isValidKey = Boolean(config.anonKey && config.anonKey.length > 10);
+
+  if (!isValidUrl || !isValidKey) {
+    if (!hasWarnedMissingConfig) {
+      const missing: string[] = [];
+      if (!isValidUrl) missing.push('VITE_SUPABASE_URL / SUPABASE_URL');
+      if (!isValidKey) missing.push('VITE_SUPABASE_ANON_KEY / SUPABASE_ANON_KEY');
+      console.warn(
+        `⚠️ [SUPABASE CONFIG] Konfiqurasiya dəyişənləri təyin edilməyib (${missing.join(', ')}). Müştəri təhlükəsiz degraded (fallback) rejimində işləyir.`
+      );
+      hasWarnedMissingConfig = true;
+    }
+    supabaseInstance = createSafeFallbackClient();
+    currentKeyUsed = '';
+    currentUrlUsed = '';
+    return supabaseInstance;
+  }
 
   try {
-    supabaseInstance = createClient(targetUrl, targetKey, {
+    supabaseInstance = createClient(config.url, config.anonKey, {
       auth: {
         persistSession: false
       }
     });
-    currentKeyUsed = targetKey;
-    currentUrlUsed = targetUrl;
+    currentKeyUsed = config.anonKey;
+    currentUrlUsed = config.url;
     return supabaseInstance;
   } catch (err) {
-    console.warn('Initial Supabase client creation failed, falling back to default:', err);
-    try {
-      supabaseInstance = createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY, {
-        auth: { persistSession: false }
-      });
-      currentKeyUsed = DEFAULT_SUPABASE_ANON_KEY;
-      currentUrlUsed = DEFAULT_SUPABASE_URL;
-      return supabaseInstance;
-    } catch (criticalErr) {
-      console.error('Critical Supabase client creation failed, activating safe fallback:', criticalErr);
-      supabaseInstance = createSafeFallbackClient();
-      return supabaseInstance;
-    }
+    console.warn('Supabase client creation failed, activating safe fallback:', err);
+    supabaseInstance = createSafeFallbackClient();
+    return supabaseInstance;
   }
 }
 
@@ -177,13 +179,18 @@ export function getSupabaseClient(forceNew = false): SupabaseClient {
  * Safe Supabase helper that never throws
  */
 export function safeCreateSupabaseClient(url?: string, anonKey?: string): SupabaseClient {
-  const validUrl = (url && (url.startsWith('http://') || url.startsWith('https://'))) ? url : DEFAULT_SUPABASE_URL;
-  const validKey = (anonKey && anonKey.length > 10) ? anonKey : DEFAULT_SUPABASE_ANON_KEY;
-  try {
-    return createClient(validUrl, validKey, { auth: { persistSession: false } });
-  } catch (e) {
-    return getSupabaseClient();
+  const normUrl = normalizeSupabaseUrl(url || '');
+  const validUrl = (normUrl && (normUrl.startsWith('http://') || normUrl.startsWith('https://'))) ? normUrl : '';
+  const validKey = (anonKey && anonKey.trim().length > 10) ? anonKey.trim() : '';
+
+  if (validUrl && validKey) {
+    try {
+      return createClient(validUrl, validKey, { auth: { persistSession: false } });
+    } catch (e) {
+      return getSupabaseClient();
+    }
   }
+  return getSupabaseClient();
 }
 
 export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
