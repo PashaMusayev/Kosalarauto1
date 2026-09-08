@@ -21,6 +21,7 @@ import {
 import { fetchAnalyticsFromSupabase } from '../services/analyticsService';
 import { 
   getActiveSupabaseConfig, 
+  fetchServerSupabaseConfig,
   STORAGE_BUCKET_NAME 
 } from '../services/supabaseClientInit';
 import { getAdminAuthHeaders } from '../services/adminAuthService';
@@ -94,8 +95,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   useEffect(() => {
     if (isOpen || showSupabaseSettingsModal) {
       const cfg = getActiveSupabaseConfig();
-      setSupabaseUrlInput(cfg.url || '');
-      setSupabaseAnonKeyInput(cfg.anonKey || '');
+      if (cfg.url) setSupabaseUrlInput(cfg.url);
+      if (cfg.anonKey) setSupabaseAnonKeyInput(cfg.anonKey);
+      if (!cfg.url || !cfg.anonKey) {
+        fetchServerSupabaseConfig().then(srv => {
+          if (srv) {
+            if (srv.url) setSupabaseUrlInput(srv.url);
+            if (srv.anonKey) setSupabaseAnonKeyInput(srv.anonKey);
+          }
+        });
+      }
     }
   }, [isOpen, showSupabaseSettingsModal, setSupabaseUrlInput, setSupabaseAnonKeyInput]);
 

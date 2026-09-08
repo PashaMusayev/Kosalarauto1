@@ -12,6 +12,7 @@ export {
   STORAGE_BUCKETS,
   normalizeSupabaseUrl,
   getActiveSupabaseConfig,
+  fetchServerSupabaseConfig,
   saveCustomSupabaseConfig,
   resetCustomSupabaseConfig,
   getSupabaseClient,

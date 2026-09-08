@@ -15,16 +15,84 @@ export function normalizeSupabaseUrl(url: string): string {
   return cleaned.trim().replace(/\/+$/, '');
 }
 
-// Get URL and Key (from environment variables or user custom override in settings)
+// In-memory cache for server-fetched Supabase config
+let serverConfigCache: { url: string; anonKey: string } | null = null;
+let serverConfigPromise: Promise<{ url: string; anonKey: string } | null> | null = null;
+
+/**
+ * Fetches the Supabase project credentials directly from the Express server endpoint.
+ * This guarantees client-side access in AI Studio even if build-time env vars weren't statically baked.
+ */
+export async function fetchServerSupabaseConfig(force = false): Promise<{ url: string; anonKey: string } | null> {
+  if (!force && serverConfigCache && serverConfigCache.url && serverConfigCache.anonKey) {
+    return serverConfigCache;
+  }
+  if (serverConfigPromise && !force) {
+    return serverConfigPromise;
+  }
+
+  serverConfigPromise = (async () => {
+    try {
+      if (typeof fetch !== 'undefined') {
+        const res = await fetch('/api/supabase-config', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.supabaseUrl && data.supabaseAnonKey) {
+            serverConfigCache = {
+              url: normalizeSupabaseUrl(data.supabaseUrl),
+              anonKey: String(data.supabaseAnonKey).trim()
+            };
+            // If the active instance is currently using fallback or empty, reinitialize it!
+            if (supabaseInstance && (!currentKeyUsed || !currentUrlUsed)) {
+              getSupabaseClient(true);
+            }
+            return serverConfigCache;
+          }
+        }
+      }
+    } catch (e) {
+      // ignore network errors
+    } finally {
+      serverConfigPromise = null;
+    }
+    return serverConfigCache;
+  })();
+
+  return serverConfigPromise;
+}
+
+// Automatically initiate config fetch in browser environment on module load
+if (typeof window !== 'undefined') {
+  fetchServerSupabaseConfig().catch(() => {});
+}
+
+// Get URL and Key (from environment variables, server API cache, or user custom override)
 export function getActiveSupabaseConfig(): { url: string; anonKey: string; bucket: string; table: string } {
   let envUrl = '';
   let envKey = '';
+
+  // 1. Direct Vite environment variable access
   try {
-    const metaEnv = (import.meta as unknown as { env?: Record<string, string> })?.env;
-    envUrl = metaEnv?.VITE_SUPABASE_URL || metaEnv?.SUPABASE_URL || '';
-    envKey = metaEnv?.VITE_SUPABASE_ANON_KEY || metaEnv?.SUPABASE_ANON_KEY || '';
+    envUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+    envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
   } catch (e) {}
 
+  // 2. Server config cache (if fetched from /api/supabase-config)
+  if ((!envUrl || !envKey) && serverConfigCache) {
+    if (!envUrl && serverConfigCache.url) envUrl = serverConfigCache.url;
+    if (!envKey && serverConfigCache.anonKey) envKey = serverConfigCache.anonKey;
+  }
+
+  // 3. Global window injection fallback
+  try {
+    if (typeof window !== 'undefined') {
+      const winAny = window as unknown as { __SUPABASE_CONFIG__?: { supabaseUrl?: string; supabaseAnonKey?: string } };
+      if (!envUrl && winAny.__SUPABASE_CONFIG__?.supabaseUrl) envUrl = winAny.__SUPABASE_CONFIG__.supabaseUrl;
+      if (!envKey && winAny.__SUPABASE_CONFIG__?.supabaseAnonKey) envKey = winAny.__SUPABASE_CONFIG__.supabaseAnonKey;
+    }
+  } catch (e) {}
+
+  // 4. Check localStorage for custom overrides (from Admin settings)
   let savedKey: string | null = null;
   let savedUrl: string | null = null;
   try {
@@ -34,14 +102,18 @@ export function getActiveSupabaseConfig(): { url: string; anonKey: string; bucke
     }
   } catch (e) {}
 
-  // Validate and normalize URL (custom override, or environment variable)
-  let resolvedUrl = normalizeSupabaseUrl(savedUrl || envUrl || '');
+  // Only consider saved overrides if they have valid format
+  const validSavedUrl = (savedUrl && (savedUrl.startsWith('http://') || savedUrl.startsWith('https://'))) ? savedUrl : '';
+  const validSavedKey = (savedKey && savedKey.trim().length > 10) ? savedKey.trim() : '';
+
+  // Validate and normalize URL (custom override, or environment variable, or server cache)
+  let resolvedUrl = normalizeSupabaseUrl(validSavedUrl || envUrl || '');
   if (!resolvedUrl.startsWith('http://') && !resolvedUrl.startsWith('https://')) {
     resolvedUrl = '';
   }
 
-  // Validate anon key (custom override, or environment variable)
-  let resolvedKey = (savedKey || envKey || '').trim();
+  // Validate anon key (custom override, or environment variable, or server cache)
+  let resolvedKey = (validSavedKey || envKey || '').trim();
   if (resolvedKey.length < 10) {
     resolvedKey = '';
   }
@@ -222,6 +294,16 @@ export async function testSupabaseConnection(maxRetries = 2): Promise<{
   carsCount?: number;
   activeBucket?: string;
 }> {
+  // Ensure we have active credentials (fetch from server if not already present)
+  let activeCfg = getActiveSupabaseConfig();
+  if (!activeCfg.url || !activeCfg.anonKey) {
+    await fetchServerSupabaseConfig(true);
+    activeCfg = getActiveSupabaseConfig();
+    if (activeCfg.url && activeCfg.anonKey) {
+      getSupabaseClient(true);
+    }
+  }
+
   const client = getSupabaseClient();
   let dbConnected = false;
   let storageConnected = false;

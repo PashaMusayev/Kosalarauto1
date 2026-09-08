@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { 
   testSupabaseConnection, 
   getActiveSupabaseConfig, 
+  fetchServerSupabaseConfig,
   saveCustomSupabaseConfig, 
   resetCustomSupabaseConfig 
 } from '../../services/supabase';
@@ -75,6 +76,7 @@ export function useSupabaseSettings(showToast: (msg: string) => void) {
   const handleResetSupabaseConfig = useCallback(async () => {
     if (window.confirm("Supabase ayarlarını standart defolt layihəyə qaytarmaq istəyirsiniz?")) {
       resetCustomSupabaseConfig();
+      await fetchServerSupabaseConfig(true);
       const cfg = getActiveSupabaseConfig();
       setSupabaseUrlInput(cfg.url || '');
       setSupabaseAnonKeyInput(cfg.anonKey || '');
