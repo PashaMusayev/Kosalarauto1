@@ -456,18 +456,23 @@ async function startServer() {
 
     const token = authHeader.substring(7).trim();
 
-    // 1. Check server-issued HMAC signed token
+    // 1. Verify server-issued HMAC signed admin session token
     if (verifyAdminSessionToken(token)) {
       return next();
     }
 
-    // 2. Check Supabase Auth JWT token if present
+    // 2. Explicit security check: If a normal Supabase authenticated user attempts to access admin endpoints,
+    // explicitly reject with 403 Forbidden. A normal Supabase user must NEVER be treated as an administrator.
     const supabase = getServerSupabase();
     if (supabase) {
       try {
         const { data: { user }, error } = await supabase.auth.getUser(token);
         if (!error && user) {
-          return next();
+          res.status(403).json({
+            success: false,
+            error: 'Giriş qadağandır: Supabase istifadəçisi admin hüquqlarına malik deyil. Yalnız etibarlı admin sessiyası qəbul edilir.'
+          });
+          return;
         }
       } catch {
         // ignore
@@ -827,18 +832,33 @@ async function startServer() {
               email: email.trim(),
               password: cleanPassword
             });
-            if (!authErr && authData?.session) {
-              resetLoginAttempts(clientIp);
-              res.json({
-                success: true,
-                authType: 'supabase_auth',
-                token: authData.session.access_token,
-                user: {
-                  id: authData.user?.id,
-                  email: authData.user?.email
-                }
-              });
-              return;
+            if (!authErr && authData?.session && authData.user) {
+              const userRole = authData.user.app_metadata?.role || authData.user.user_metadata?.role || '';
+              const adminEmailEnv = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+              const isAllowlistedEmail = adminEmailEnv && authData.user.email?.toLowerCase() === adminEmailEnv;
+              const isAdminRole = userRole === 'admin';
+
+              if (isAdminRole || isAllowlistedEmail) {
+                resetLoginAttempts(clientIp);
+                const sessionToken = createAdminSessionToken();
+                res.json({
+                  success: true,
+                  authType: 'supabase_auth',
+                  token: sessionToken,
+                  user: {
+                    id: authData.user.id,
+                    email: authData.user.email
+                  }
+                });
+                return;
+              } else {
+                recordFailedLogin(clientIp);
+                res.status(403).json({
+                  success: false,
+                  error: 'Giriş qadağandır: Bu Supabase hesabı admin səlahiyyətinə malik deyil.'
+                });
+                return;
+              }
             }
           } catch (sbAuthErr) {
             console.warn('Supabase auth signIn error:', sbAuthErr);

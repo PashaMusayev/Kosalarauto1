@@ -171,37 +171,9 @@ export async function verifyAdminCredentials(params: {
 
   const cleanPass = password.trim();
 
-  // 1. If email is provided, try direct Supabase Auth signInWithPassword
-  if (email && email.trim()) {
-    try {
-      const client = getSupabaseClient();
-      const { data, error } = await client.auth.signInWithPassword({
-        email: email.trim(),
-        password: cleanPass
-      });
-      if (!error && data?.session) {
-        try {
-          if (typeof sessionStorage !== 'undefined') {
-            sessionStorage.setItem('kosalar_admin_session_token', data.session.access_token);
-            sessionStorage.setItem('kosalar_admin_logged', 'true');
-          }
-        } catch (e) {}
-        return {
-          success: true,
-          token: data.session.access_token,
-          user: data.user,
-          authType: 'supabase_auth'
-        };
-      }
-      if (error) {
-        return { success: false, error: `Supabase Auth xətası: ${error.message}` };
-      }
-    } catch (e: any) {
-      console.warn('Supabase Auth verification notice:', e?.message || e);
-    }
-  }
-
-  // 2. Call backend secure endpoint /api/admin/verify
+  // Call backend secure endpoint /api/admin/verify
+  // The server securely verifies credentials (ADMIN_PASSWORD or validated admin Supabase user)
+  // and issues a cryptographically signed HMAC admin session token.
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
