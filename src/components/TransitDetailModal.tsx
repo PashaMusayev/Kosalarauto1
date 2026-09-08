@@ -12,6 +12,7 @@ import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl } from '../utils/imageFal
 import { trackWhatsAppClick } from '../services/analyticsService';
 import { useBodyScrollLock } from '../utils/scrollLock';
 import { TurboImageSlider } from './TurboImageSlider';
+import { prefetchImages, prefetchCarouselWindow } from '../utils/imagePreloader';
 
 // ==========================================
 // 1. ROBUST ERROR BOUNDARY COMPONENT
@@ -309,6 +310,20 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
     return list.length > 0 ? list : [DEFAULT_VEHICLE_PLACEHOLDER];
   }, [car]);
+
+  // Arxa fonda şəkil preloading: İlk 4 şəkli dərhal əvvəlcədən yüklə
+  useEffect(() => {
+    if (imagesList && imagesList.length > 0) {
+      prefetchImages(imagesList.slice(0, 4));
+    }
+  }, [imagesList]);
+
+  // Aktiv şəkil dəyişdikdə: Növbəti 2 və əvvəlki 1 şəkli arxa fonda təmin et
+  useEffect(() => {
+    if (imagesList && imagesList.length > 0) {
+      prefetchCarouselWindow(imagesList, activeImageIndex);
+    }
+  }, [imagesList, activeImageIndex]);
 
   // Keyboard navigation & quick image switch
   const handlePrevImage = useCallback((e?: React.MouseEvent | React.TouchEvent) => {

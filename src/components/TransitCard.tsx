@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Heart } from 'lucide-react';
 import { TransitCar } from '../types';
 import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl } from '../utils/imageFallback';
+import { prefetchImages } from '../utils/imagePreloader';
 
 interface TransitCardProps {
   car: TransitCar;
@@ -34,10 +35,22 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
     ? DEFAULT_VEHICLE_PLACEHOLDER 
     : getValidImageUrl(car?.primaryImage), [imgError, car]);
 
+  // Arxa fonda elanın digər şəkillərini qabaqcadan kesə yüklə (hover / touch anında)
+  const handlePrefetch = () => {
+    if (car) {
+      const candidates = [car.primaryImage, ...(car.images || [])].filter(Boolean);
+      if (candidates.length > 0) {
+        prefetchImages(candidates.slice(0, 4));
+      }
+    }
+  };
+
   return (
     <div 
       className="bg-white rounded-lg sm:rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-md transition-all duration-200 flex flex-col overflow-hidden group hover:border-slate-300 cursor-pointer"
       onClick={() => onViewDetails(car)}
+      onMouseEnter={handlePrefetch}
+      onTouchStart={handlePrefetch}
     >
       {/* Top Image Section (Turbo.az Style 4:3 Aspect, Clean Slate Base, Full Cover) */}
       <div 
