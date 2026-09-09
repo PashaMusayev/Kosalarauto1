@@ -442,7 +442,7 @@ const SlideItem = React.memo<SlideItemProps>(({
             } ${
               isLightbox
                 ? 'object-contain p-2 sm:p-4'
-                : 'object-cover md:object-contain p-0 md:p-2'
+                : 'object-cover md:object-contain p-0'
             }`}
           />
         </div>
