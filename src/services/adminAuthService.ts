@@ -205,7 +205,9 @@ export async function verifyAdminCredentials(params: {
       const json = await resp.json().catch(() => ({}));
       return { success: false, error: json.error || 'Şifrə yanlışdır! Zəhmət olmasa təkrar yoxlayın.' };
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('Admin login connection error:', errMsg);
     return { 
       success: false, 
       error: 'Serverlə əlaqə qurulmadı. Zəhmət olmasa internet bağlantınızı və ya server statusunu yoxlayın.' 

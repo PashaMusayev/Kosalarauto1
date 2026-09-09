@@ -90,6 +90,21 @@ const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_PERIOD_MS = 15 * 60 * 1000; // 15 minutes
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 
+// Periodic cleanup of expired rate-limit records every 10 minutes
+const RATE_LIMIT_CLEANUP_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const rateLimitCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of loginAttempts.entries()) {
+    if (now >= record.resetAt) {
+      loginAttempts.delete(ip);
+    }
+  }
+}, RATE_LIMIT_CLEANUP_INTERVAL_MS);
+
+if (rateLimitCleanupTimer.unref) {
+  rateLimitCleanupTimer.unref();
+}
+
 function checkLoginRateLimit(ip: string): { allowed: boolean; waitSeconds?: number } {
   const now = Date.now();
   const record = loginAttempts.get(ip);
@@ -170,25 +185,113 @@ function validateAndSanitizeCars(cars: unknown[]): { valid: boolean; error?: str
     const title = String(c.title || 'Avtomobil').slice(0, 200);
     const brand = String(c.brand || c.make || 'Ford').slice(0, 100);
     const model = String(c.model || 'Transit').slice(0, 100);
-    const images = Array.isArray(c.images)
-      ? (c.images as unknown[]).filter((img: unknown): img is string => typeof img === 'string' && img.length < 2000).slice(0, 50)
-      : [];
-    const primaryImage = typeof c.primaryImage === 'string' ? c.primaryImage.slice(0, 2000) : (images[0] || '');
+    const city = String(c.city || c.location || 'Bakı').slice(0, 100);
+    const location = city;
+    const bodyType = String(c.bodyType || c.body_type || 'Yük furqonu').slice(0, 100);
+    const color = String(c.color || 'Ağ').slice(0, 100);
+    const engine = String(c.engine || '2.2 TDCi').slice(0, 100);
+    const hp = Math.min(2000, Math.max(0, Number(c.hp || c.horsePower || c.horse_power) || 125));
+    const fuelType = String(c.fuelType || c.fuel_type || 'Dizel').slice(0, 100);
+    const transmission = String(c.transmission || 'Mexaniki').slice(0, 100);
+    const wheelDrive = String(c.wheelDrive || c.driveType || c.drive_type || 'Ön çəkən (FWD)').slice(0, 100);
+    const baseLength = String(c.baseLength || c.base_length || '3.30 m').slice(0, 100);
+    const roofHeight = String(c.roofHeight || c.roof_height || 'Hündür dam').slice(0, 100);
+    const condition = String(c.condition || 'Vuruğu yoxdur, rənglənməyib').slice(0, 200);
+    const vinCode = String(c.vinCode || c.vin_code || '').trim().toUpperCase().slice(0, 50);
+    const description = String(c.description || '').slice(0, 5000);
+    const isFeatured = Boolean(c.isFeatured ?? c.is_featured);
+    const status = c.status === 'sold' ? 'sold' : 'active';
 
-    sanitized.push({
-      ...c,
+    const images = Array.isArray(c.images)
+      ? (c.images as unknown[])
+          .filter((img: unknown): img is string => typeof img === 'string' && img.trim().length > 0 && img.length < 2000)
+          .map(img => String(img).slice(0, 2000))
+          .slice(0, 50)
+      : [];
+    const primaryImage = typeof c.primaryImage === 'string' && c.primaryImage.trim().length > 0
+      ? c.primaryImage.slice(0, 2000)
+      : (typeof c.primary_image === 'string' && c.primary_image.trim().length > 0 ? c.primary_image.slice(0, 2000) : (images[0] || ''));
+
+    const rawBadges = Array.isArray(c.statusBadges) ? c.statusBadges : Array.isArray(c.badges) ? c.badges : [];
+    const statusBadges = (rawBadges as unknown[])
+      .filter((b: unknown): b is string => typeof b === 'string' && b.trim().length > 0)
+      .map(b => String(b).slice(0, 100))
+      .slice(0, 20);
+
+    // Flexible features validation (supports array of strings or key-value object)
+    let features: string[] | Record<string, unknown> = [];
+    if (Array.isArray(c.features)) {
+      features = (c.features as unknown[])
+        .filter((f: unknown): f is string => typeof f === 'string' && f.trim().length > 0)
+        .map(f => String(f).slice(0, 200))
+        .slice(0, 100);
+    } else if (c.features && typeof c.features === 'object') {
+      const cleanObj: Record<string, unknown> = {};
+      const entries = Object.entries(c.features as Record<string, unknown>).slice(0, 50);
+      for (const [key, val] of entries) {
+        const cleanKey = String(key).slice(0, 100);
+        if (Array.isArray(val)) {
+          cleanObj[cleanKey] = (val as unknown[])
+            .filter((v: unknown): v is string => typeof v === 'string')
+            .map(v => String(v).slice(0, 200))
+            .slice(0, 50);
+        } else if (typeof val === 'string') {
+          cleanObj[cleanKey] = String(val).slice(0, 200);
+        } else if (typeof val === 'boolean' || typeof val === 'number') {
+          cleanObj[cleanKey] = val;
+        }
+      }
+      features = cleanObj;
+    }
+
+    let specs: Record<string, unknown> | undefined = undefined;
+    if (c.specs && typeof c.specs === 'object' && !Array.isArray(c.specs)) {
+      specs = {};
+      const entries = Object.entries(c.specs as Record<string, unknown>).slice(0, 50);
+      for (const [key, val] of entries) {
+        const cleanKey = String(key).slice(0, 100);
+        if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+          specs[cleanKey] = typeof val === 'string' ? val.slice(0, 500) : val;
+        }
+      }
+    }
+
+    const sanitizedCar: Record<string, unknown> = {
       id,
       title,
       brand,
       make: brand,
       model,
-      price: rawPrice,
+      city,
+      location,
       year: rawYear,
-      mileage: Math.max(0, Number(c.mileage) || 0),
+      price: rawPrice,
+      mileage: Math.min(2000000, Math.max(0, Number(c.mileage) || 0)),
+      bodyType,
+      color,
+      engine,
+      hp,
+      fuelType,
+      transmission,
+      wheelDrive,
+      baseLength,
+      roofHeight,
+      condition,
+      vinCode,
       primaryImage,
       images,
-      status: c.status === 'sold' ? 'sold' : 'active'
-    });
+      statusBadges,
+      badges: statusBadges,
+      description,
+      features,
+      isFeatured,
+      status
+    };
+    if (specs) {
+      sanitizedCar.specs = specs;
+    }
+
+    sanitized.push(sanitizedCar);
   }
 
   return { valid: true, sanitized };
@@ -352,8 +455,15 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  // Global JSON body parser: 2MB limit (sufficient for catalog sync and general requests)
+  // High limit (50MB) is applied strictly per-route on POST /api/upload-image
+  app.use((req, res, next) => {
+    if (req.path === '/api/upload-image') {
+      return next();
+    }
+    return express.json({ limit: '2mb' })(req, res, next);
+  });
+  app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
   // Static route for vehicle pictures with safe fallback
   app.use('/pics', express.static(path.join(process.cwd(), 'public/pics')));
@@ -383,9 +493,7 @@ async function startServer() {
 
   // Cars Catalog APIs (Supabase Database + Persistent Fallback)
   app.get('/api/cars', async (req, res) => {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
+    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
 
     const supabase = getServerSupabase();
     if (supabase) {
@@ -675,7 +783,7 @@ async function startServer() {
   });
 
   // Protected: Multiple image upload helper endpoint (Supabase Storage First with Magic Byte Inspection)
-  app.post('/api/upload-image', requireAdminAuth, async (req, res) => {
+  app.post('/api/upload-image', express.json({ limit: '50mb' }), requireAdminAuth, async (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
       const { dataUrl, filename } = req.body;
@@ -718,6 +826,7 @@ async function startServer() {
 
       // 1. Try Supabase Storage upload
       const supabase = getServerSupabase();
+      let lastUploadError: unknown = null;
       if (supabase) {
         try {
           const contentType = `image/${extension === 'jpg' ? 'jpeg' : extension}`;
@@ -735,6 +844,7 @@ async function startServer() {
               return;
             }
           } else {
+            lastUploadError = upErr;
             console.warn(`Supabase storage upload error on ${STORAGE_BUCKET_NAME}:`, upErr.message);
             // Secondary attempt with clean name directly
             const { error: retryErr } = await supabase.storage
@@ -749,37 +859,19 @@ async function startServer() {
                 res.json({ url: fbData.publicUrl, success: true, storage: 'supabase' });
                 return;
               }
+            } else {
+              lastUploadError = retryErr;
             }
           }
         } catch (sbStorageErr) {
+          lastUploadError = sbStorageErr;
           console.warn('Supabase storage exception:', sbStorageErr);
         }
       }
 
-      // 2. Fallback to local server file system
-      const uploadsDir = path.join(process.cwd(), 'public', 'pics', 'uploads');
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
-
-      const safeName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${extension}`;
-      const filePath = path.join(uploadsDir, safeName);
-      fs.writeFileSync(filePath, buffer);
-
-      try {
-        const distUploadsDir = path.join(process.cwd(), 'dist', 'pics', 'uploads');
-        if (fs.existsSync(path.join(process.cwd(), 'dist'))) {
-          if (!fs.existsSync(distUploadsDir)) {
-            fs.mkdirSync(distUploadsDir, { recursive: true });
-          }
-          fs.writeFileSync(path.join(distUploadsDir, safeName), buffer);
-        }
-      } catch (distErr) {
-        // Non-critical
-      }
-
-      const publicUrl = `/pics/uploads/${safeName}`;
-      res.json({ url: publicUrl, success: true, storage: 'local' });
+      console.error('Supabase storage upload failed:', lastUploadError);
+      res.status(503).json({ success: false, error: 'Şəkil yaddaşına yüklənmə uğursuz oldu. Zəhmət olmasa bir azdan yenidən cəhd edin.' });
+      return;
     } catch (err: unknown) {
       console.error('Image upload failed:', err);
       res.status(500).json({ error: 'Şəkil yüklənmədi' });
@@ -898,8 +990,9 @@ async function startServer() {
         success: false,
         error: 'Daxil edilən şifrə yanlışdır! Zəhmət olmasa təkrar yoxlayın.'
       });
-    } catch (err: any) {
-      console.error('Admin verify error:', err);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('Admin verify error:', errMsg);
       res.status(500).json({ success: false, error: 'Təsdiqləmə zamanı daxili server xətası baş verdi' });
     }
   });
