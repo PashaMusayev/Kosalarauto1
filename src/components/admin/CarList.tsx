@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   CheckSquare, 
   CheckCircle2, 
@@ -9,6 +10,13 @@ import {
 } from 'lucide-react';
 import { TransitCar } from '../../types';
 import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl } from '../../utils/imageFallback';
+
+interface ActiveMenuPosition {
+  carId: string | number;
+  top?: number;
+  bottom?: number;
+  right: number;
+}
 
 interface CarListProps {
   carsList: TransitCar[];
@@ -33,7 +41,56 @@ export const CarList: React.FC<CarListProps> = ({
   onEditCar,
   onDeleteCar
 }) => {
-  const [openMenuCarId, setOpenMenuCarId] = useState<string | null>(null);
+  const [activeMenu, setActiveMenu] = useState<ActiveMenuPosition | null>(null);
+
+  // Close dropdown on Escape, window resize, or scroll
+  useEffect(() => {
+    if (!activeMenu) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveMenu(null);
+      }
+    };
+
+    const handleScrollOrResize = () => {
+      setActiveMenu(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+    };
+  }, [activeMenu]);
+
+  const handleKebabClick = (e: React.MouseEvent<HTMLButtonElement>, carId: string | number) => {
+    e.stopPropagation();
+    if (activeMenu?.carId === carId) {
+      setActiveMenu(null);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    // Dropdown menu is ~80px. If space below is less than 120px and above has more room, open upward
+    const openUpward = spaceBelow < 120 && spaceAbove > spaceBelow;
+
+    // Align right edge of menu to right edge of kebab button, clamped within viewport bounds
+    const right = Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - 184));
+
+    setActiveMenu({
+      carId,
+      top: openUpward ? undefined : rect.bottom + 6,
+      bottom: openUpward ? window.innerHeight - rect.top + 6 : undefined,
+      right,
+    });
+  };
 
   const filteredCars = (carsList || []).filter(car => {
     if (!car) return false;
@@ -223,7 +280,7 @@ export const CarList: React.FC<CarListProps> = ({
             </span>
           </div>
 
-          <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-slate-700 min-h-[180px] pb-12 sm:pb-6">
+          <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-slate-700">
             <table className="w-full text-left text-xs text-slate-300 min-w-[680px]">
               <thead className="bg-slate-900/90 text-[11px] font-bold text-slate-400 border-b border-slate-800">
                 <tr>
@@ -238,12 +295,10 @@ export const CarList: React.FC<CarListProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
-                {filteredCars.map((car, index) => {
+                {filteredCars.map(car => {
                   const feats = Array.isArray(car.features) ? car.features : [];
                   const isSold = car.status === 'sold';
-                  const isUpdating = updatingStatusCarId === car.id;
-                  const isMenuOpen = openMenuCarId === String(car.id);
-                  const isNearBottom = filteredCars.length > 2 && index >= filteredCars.length - 2;
+                  const isMenuOpen = activeMenu?.carId === car.id;
 
                   return (
                     <tr key={car.id} className={`hover:bg-slate-900/50 transition-colors ${isSold ? 'opacity-75 bg-slate-950/60' : ''}`}>
@@ -317,7 +372,7 @@ export const CarList: React.FC<CarListProps> = ({
                         )}
                       </td>
 
-                      {/* Əməliyyatlar Sütunu (Redaktə + Kebab Dropdown) */}
+                      {/* Əməliyyatlar Sütunu (Redaktə + Kebab Menyu Trigger) */}
                       <td className="py-2.5 px-4 text-right whitespace-nowrap">
                         <div className="inline-flex items-center justify-end gap-1.5">
                           {/* Redaktə Düyməsi (Primary always-visible) */}
@@ -331,87 +386,19 @@ export const CarList: React.FC<CarListProps> = ({
                             <span>Redaktə</span>
                           </button>
 
-                          {/* Kebab Dropdown Menu (Status dəyişmə & Sil) */}
-                          <div className="relative inline-block text-left">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenMenuCarId(prev => prev === String(car.id) ? null : String(car.id));
-                              }}
-                              className={`p-1.5 rounded-lg border transition-all ${
-                                isMenuOpen
-                                  ? 'bg-slate-700 text-white border-slate-600 shadow-sm'
-                                  : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700 active:scale-95'
-                              }`}
-                              title="Digər əməliyyatlar (Status, Sil)"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-
-                            {isMenuOpen && (
-                              <>
-                                <div 
-                                  className="fixed inset-0 z-30" 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOpenMenuCarId(null);
-                                  }} 
-                                />
-                                <div 
-                                  className={`absolute right-0 z-40 w-44 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl py-1 text-xs divide-y divide-slate-800 animate-in fade-in zoom-in-95 ${
-                                    isNearBottom
-                                      ? 'bottom-full mb-1.5'
-                                      : 'top-full mt-1.5'
-                                  }`}
-                                >
-                                  {/* Satıldı et / Satışa çıxar */}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setOpenMenuCarId(null);
-                                      onToggleStatus(car);
-                                    }}
-                                    disabled={isUpdating}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left font-medium transition-colors ${
-                                      isSold 
-                                        ? 'text-emerald-300 hover:bg-emerald-950/40 hover:text-white' 
-                                        : 'text-amber-300 hover:bg-amber-950/40 hover:text-white'
-                                    }`}
-                                  >
-                                    {isUpdating ? (
-                                      <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
-                                    ) : isSold ? (
-                                      <RefreshCw className="w-3.5 h-3.5 shrink-0" />
-                                    ) : (
-                                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                                    )}
-                                    <span>{isSold ? 'Satışa çıxar' : 'Satıldı et'}</span>
-                                  </button>
-
-                                  {/* Sil */}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setOpenMenuCarId(null);
-                                      onDeleteCar(car.id, car.images);
-                                    }}
-                                    disabled={deletingCarId === String(car.id)}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 font-medium transition-colors"
-                                  >
-                                    {deletingCarId === String(car.id) ? (
-                                      <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0 text-rose-300" />
-                                    ) : (
-                                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                                    )}
-                                    <span>Sil</span>
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
+                          {/* Kebab Dropdown Menyu Trigger Düyməsi */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleKebabClick(e, car.id)}
+                            className={`p-1.5 rounded-lg border transition-all ${
+                              isMenuOpen
+                                ? 'bg-slate-700 text-white border-slate-600 shadow-sm'
+                                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700 active:scale-95'
+                            }`}
+                            title="Digər əməliyyatlar (Status, Sil)"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -422,6 +409,89 @@ export const CarList: React.FC<CarListProps> = ({
           </div>
         </div>
       )}
+
+      {/* Portal-rendered Kebab Dropdown Menu (Mounted to document.body to avoid table overflow-x/y clipping) */}
+      {activeMenu && typeof document !== 'undefined' && (() => {
+        const activeCar = carsList.find(c => c.id === activeMenu.carId);
+        if (!activeCar) return null;
+
+        const isSold = activeCar.status === 'sold';
+        const isUpdating = updatingStatusCarId === activeCar.id;
+        const isDeleting = deletingCarId === String(activeCar.id);
+
+        return createPortal(
+          <>
+            {/* Click-outside backdrop */}
+            <div 
+              className="fixed inset-0 z-[9998]" 
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveMenu(null);
+              }} 
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setActiveMenu(null);
+              }}
+            />
+            {/* Portal Dropdown Panel */}
+            <div 
+              style={{
+                position: 'fixed',
+                right: `${activeMenu.right}px`,
+                ...(activeMenu.top !== undefined ? { top: `${activeMenu.top}px` } : {}),
+                ...(activeMenu.bottom !== undefined ? { bottom: `${activeMenu.bottom}px` } : {}),
+              }}
+              className="z-[9999] w-44 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl py-1 text-xs divide-y divide-slate-800 animate-in fade-in zoom-in-95 select-none"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Satıldı et / Satışa çıxar */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveMenu(null);
+                  onToggleStatus(activeCar);
+                }}
+                disabled={isUpdating}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 text-left font-medium transition-colors ${
+                  isSold 
+                    ? 'text-emerald-300 hover:bg-emerald-950/40 hover:text-white' 
+                    : 'text-amber-300 hover:bg-amber-950/40 hover:text-white'
+                }`}
+              >
+                {isUpdating ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                ) : isSold ? (
+                  <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                )}
+                <span>{isSold ? 'Satışa çıxar' : 'Satıldı et'}</span>
+              </button>
+
+              {/* Sil */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveMenu(null);
+                  onDeleteCar(activeCar.id, activeCar.images);
+                }}
+                disabled={isDeleting}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 font-medium transition-colors"
+              >
+                {isDeleting ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0 text-rose-300" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                )}
+                <span>Sil</span>
+              </button>
+            </div>
+          </>,
+          document.body
+        );
+      })()}
     </>
   );
 };
