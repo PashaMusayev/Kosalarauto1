@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   CheckSquare, 
   CheckCircle2, 
   RefreshCw, 
   Edit3, 
-  Trash2 
+  Trash2,
+  MoreVertical
 } from 'lucide-react';
 import { TransitCar } from '../../types';
 import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl } from '../../utils/imageFallback';
@@ -32,6 +33,8 @@ export const CarList: React.FC<CarListProps> = ({
   onEditCar,
   onDeleteCar
 }) => {
+  const [openMenuCarId, setOpenMenuCarId] = useState<string | null>(null);
+
   const filteredCars = (carsList || []).filter(car => {
     if (!car) return false;
     if (activeFilterTab === 'active' && car.status === 'sold') return false;
@@ -220,8 +223,8 @@ export const CarList: React.FC<CarListProps> = ({
             </span>
           </div>
 
-          <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-slate-700">
-            <table className="w-full text-left text-xs text-slate-300 min-w-[800px]">
+          <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-slate-700 min-h-[180px] pb-12 sm:pb-6">
+            <table className="w-full text-left text-xs text-slate-300 min-w-[680px]">
               <thead className="bg-slate-900/90 text-[11px] font-bold text-slate-400 border-b border-slate-800">
                 <tr>
                   <th className="py-3 px-4 whitespace-nowrap">Şəkil</th>
@@ -235,10 +238,12 @@ export const CarList: React.FC<CarListProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
-                {filteredCars.map(car => {
+                {filteredCars.map((car, index) => {
                   const feats = Array.isArray(car.features) ? car.features : [];
                   const isSold = car.status === 'sold';
                   const isUpdating = updatingStatusCarId === car.id;
+                  const isMenuOpen = openMenuCarId === String(car.id);
+                  const isNearBottom = filteredCars.length > 2 && index >= filteredCars.length - 2;
 
                   return (
                     <tr key={car.id} className={`hover:bg-slate-900/50 transition-colors ${isSold ? 'opacity-75 bg-slate-950/60' : ''}`}>
@@ -312,65 +317,101 @@ export const CarList: React.FC<CarListProps> = ({
                         )}
                       </td>
 
-                      {/* Əməliyyatlar Sütunu (Status Dəyişmə + Redaktə + Sil) */}
+                      {/* Əməliyyatlar Sütunu (Redaktə + Kebab Dropdown) */}
                       <td className="py-2.5 px-4 text-right whitespace-nowrap">
                         <div className="inline-flex items-center justify-end gap-1.5">
-                          {/* Status Dəyişmə Düyməsi */}
-                          <button
-                            type="button"
-                            onClick={() => onToggleStatus(car)}
-                            disabled={isUpdating}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all inline-flex items-center gap-1.5 ${
-                              isSold
-                                ? 'bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border-emerald-500/40 shadow-sm'
-                                : 'bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border-amber-500/40 shadow-sm'
-                            }`}
-                            title={isSold ? "Saytda yenidən satışa çıxar" : "Satıldı kimi qeyd et və saytdan gizlət"}
-                          >
-                            {isUpdating ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : isSold ? (
-                              <>
-                                <RefreshCw className="w-3.5 h-3.5" />
-                                <span>Satışa çıxar</span>
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>Satıldı et</span>
-                              </>
-                            )}
-                          </button>
-
-                          {/* Redaktə Düyməsi */}
+                          {/* Redaktə Düyməsi (Primary always-visible) */}
                           <button 
                             type="button"
                             onClick={() => onEditCar(car)}
-                            className="px-2.5 py-1.5 rounded-lg bg-blue-600/15 hover:bg-blue-600/30 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-bold inline-flex items-center gap-1.5 transition-all"
+                            className="px-2.5 py-1.5 rounded-lg bg-blue-600/15 hover:bg-blue-600/30 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-bold inline-flex items-center gap-1.5 transition-all active:scale-95"
                             title="Avtomobili redaktə et"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                             <span>Redaktə</span>
                           </button>
 
-                          {/* Sil Düyməsi */}
-                          <button 
-                            type="button"
-                            onClick={() => onDeleteCar(car.id, car.images)}
-                            disabled={deletingCarId === car.id}
-                            className={`p-1.5 rounded-lg border transition-all ${
-                              deletingCarId === car.id
-                                ? 'bg-rose-950/80 border-rose-700 text-rose-300 opacity-60 cursor-not-allowed'
-                                : 'bg-rose-600/15 hover:bg-rose-600/30 text-rose-400 border-rose-500/20 active:scale-95'
-                            }`}
-                            title="Sil"
-                          >
-                            {deletingCarId === car.id ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-300" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
+                          {/* Kebab Dropdown Menu (Status dəyişmə & Sil) */}
+                          <div className="relative inline-block text-left">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuCarId(prev => prev === String(car.id) ? null : String(car.id));
+                              }}
+                              className={`p-1.5 rounded-lg border transition-all ${
+                                isMenuOpen
+                                  ? 'bg-slate-700 text-white border-slate-600 shadow-sm'
+                                  : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700 active:scale-95'
+                              }`}
+                              title="Digər əməliyyatlar (Status, Sil)"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+
+                            {isMenuOpen && (
+                              <>
+                                <div 
+                                  className="fixed inset-0 z-30" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuCarId(null);
+                                  }} 
+                                />
+                                <div 
+                                  className={`absolute right-0 z-40 w-44 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl py-1 text-xs divide-y divide-slate-800 animate-in fade-in zoom-in-95 ${
+                                    isNearBottom
+                                      ? 'bottom-full mb-1.5'
+                                      : 'top-full mt-1.5'
+                                  }`}
+                                >
+                                  {/* Satıldı et / Satışa çıxar */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenMenuCarId(null);
+                                      onToggleStatus(car);
+                                    }}
+                                    disabled={isUpdating}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left font-medium transition-colors ${
+                                      isSold 
+                                        ? 'text-emerald-300 hover:bg-emerald-950/40 hover:text-white' 
+                                        : 'text-amber-300 hover:bg-amber-950/40 hover:text-white'
+                                    }`}
+                                  >
+                                    {isUpdating ? (
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                                    ) : isSold ? (
+                                      <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                                    ) : (
+                                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                    )}
+                                    <span>{isSold ? 'Satışa çıxar' : 'Satıldı et'}</span>
+                                  </button>
+
+                                  {/* Sil */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenMenuCarId(null);
+                                      onDeleteCar(car.id, car.images);
+                                    }}
+                                    disabled={deletingCarId === String(car.id)}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 font-medium transition-colors"
+                                  >
+                                    {deletingCarId === String(car.id) ? (
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0 text-rose-300" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                                    )}
+                                    <span>Sil</span>
+                                  </button>
+                                </div>
+                              </>
                             )}
-                          </button>
+                          </div>
                         </div>
                       </td>
                     </tr>

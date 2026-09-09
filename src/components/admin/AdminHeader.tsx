@@ -34,6 +34,12 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onLogout,
   onClose
 }) => {
+  const handleLogoutClick = () => {
+    if (window.confirm("Sessiyadan çıxmaq istədiyinizə əminsiniz?")) {
+      onLogout();
+    }
+  };
+
   return (
     <header className="bg-slate-900 border-b border-slate-800 shrink-0 z-10 shadow-lg">
       {!isAuthenticated ? (
@@ -71,17 +77,20 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
                 <span className="text-sm font-black text-white tracking-tight">KOSALAR AUTO</span>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-3">
                 <button 
-                  onClick={onLogout}
-                  className="text-xs font-bold text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 px-3 py-1.5 rounded-lg border border-rose-800/40 transition-colors"
+                  type="button"
+                  onClick={handleLogoutClick}
+                  className="text-xs font-medium text-slate-400 hover:text-rose-300 hover:bg-rose-950/20 px-2.5 py-1.5 rounded-lg transition-colors"
+                  title="Admin sessiyasından çıxış"
                 >
                   Çıxış
                 </button>
                 <button 
+                  type="button"
                   onClick={onClose}
-                  className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors border border-slate-700"
-                  title="Sayta qayıt"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition-all active:scale-95"
+                  title="Paneli bağla və sayta qayıt"
                 >
                   <X className="w-4 h-4" />
                   <span>Bağla</span>
@@ -227,18 +236,21 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
               </div>
 
               <button 
-                onClick={onLogout}
-                className="text-xs text-rose-300 hover:text-white bg-rose-950/40 hover:bg-rose-900/80 px-3 sm:px-3.5 py-2 rounded-xl border border-rose-800/50 transition-colors font-bold"
+                type="button"
+                onClick={handleLogoutClick}
+                className="text-xs font-medium text-slate-400 hover:text-rose-300 hover:bg-rose-950/20 px-3 py-2 rounded-xl transition-colors mr-1"
+                title="Admin sessiyasından çıxış"
               >
                 Çıxış
               </button>
               <button 
+                type="button"
                 onClick={onClose}
-                className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors border border-slate-700 text-xs font-bold"
-                title="Sayta qayıt"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-sm hover:shadow-blue-500/20 transition-all text-xs font-bold active:scale-95"
+                title="Paneli bağla və sayta qayıt"
               >
                 <X className="w-4 h-4" />
-                <span className="hidden sm:inline">Sayta qayıt</span>
+                <span className="hidden sm:inline">Bağla</span>
               </button>
             </div>
           </div>
