@@ -452,7 +452,10 @@ function saveCarsToDisk(cars: unknown[]) {
  */
 function formatSupabaseCarRow(row: Record<string, any>): Record<string, unknown> {
   const specs = (typeof row.specs === 'object' && row.specs !== null) ? (row.specs as Record<string, unknown>) : {};
-  const rawBrand = String(row.brand || row.make || specs.brand || specs.make || ((row.title as string)?.toLowerCase().includes('mercedes') ? 'Mercedes-Benz' : 'Ford'));
+  const rawBrandInput = String(row.brand || row.make || specs.brand || specs.make || '');
+  const rawBrand = rawBrandInput.toLowerCase().includes('mercedes')
+    ? 'Mercedes'
+    : (rawBrandInput || ((row.title as string)?.toLowerCase().includes('mercedes') ? 'Mercedes' : 'Ford'));
   const rawModel = String(row.model || specs.model || ((row.title as string)?.toLowerCase().includes('sprinter') ? 'Sprinter' : 'Transit'));
   const city = String(row.city || row.location || specs.city || specs.location || 'Bakı');
   const condition = String(row.condition || specs.condition || 'Vuruğu yoxdur, rənglənməyib');
@@ -497,7 +500,10 @@ function formatSupabaseCarRow(row: Record<string, any>): Record<string, unknown>
  * Maps a validated, sanitized car object to a single Supabase database row.
  */
 function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string, unknown> {
-  const brand = (c.brand as string) || (c.make as string) || ((c.title as string)?.toLowerCase().includes('mercedes') ? 'Mercedes-Benz' : 'Ford');
+  const rawBrandInput = String(c.brand || c.make || '');
+  const brand = rawBrandInput.toLowerCase().includes('mercedes')
+    ? 'Mercedes'
+    : (rawBrandInput || ((c.title as string)?.toLowerCase().includes('mercedes') ? 'Mercedes' : 'Ford'));
   const model = (c.model as string) || ((c.title as string)?.toLowerCase().includes('sprinter') ? 'Sprinter' : 'Transit');
   const city = (c.city as string) || (c.location as string) || 'Bakı';
   const condition = (c.condition as string) || 'Vuruğu yoxdur, rənglənməyib';

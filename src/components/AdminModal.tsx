@@ -318,7 +318,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setEditingCarId(car.id);
     setSaveError(null);
     setTitle(car.title || '');
-    setBrand(car.brand || car.make || '');
+    const rawB = (car.brand || car.make || '').trim();
+    setBrand(rawB.toLowerCase().includes('mercedes') || (car.title && car.title.toLowerCase().includes('mercedes')) ? 'Mercedes' : rawB);
     setModel(car.model || '');
     setCity(car.city || car.location || '');
     setPrice(typeof car.price === 'number' ? car.price : (car.price ? Number(car.price) : ''));

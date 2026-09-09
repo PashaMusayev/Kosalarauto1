@@ -280,7 +280,7 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                       Marka <span className="text-rose-400">*</span>:
                     </label>
                     <select
-                      value={brand}
+                      value={brand.toLowerCase().includes('mercedes') ? 'Mercedes' : brand}
                       onChange={(e) => {
                         const newBrand = e.target.value;
                         setBrand(newBrand);
@@ -290,7 +290,7 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                       required
                     >
                       <option value="">Seçin...</option>
-                      <option value="Mercedes-Benz">Mercedes-Benz</option>
+                      <option value="Mercedes">Mercedes</option>
                       <option value="Ford">Ford</option>
                     </select>
                   </div>

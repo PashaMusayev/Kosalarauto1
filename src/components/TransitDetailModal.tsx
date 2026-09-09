@@ -112,7 +112,7 @@ export function formatBrandDisplayName(brand?: string, title?: string): string {
   const raw = (brand || '').trim();
   const lower = raw.toLowerCase();
   if (lower === 'ford') return 'Ford';
-  if (lower === 'mercedes' || lower === 'mercedes-benz' || lower === 'mercedes benz') return 'Mercedes-Benz';
+  if (lower === 'mercedes' || lower === 'mercedes-benz' || lower === 'mercedes benz') return 'Mercedes';
   if (lower === 'iveco') return 'Iveco';
   if (lower === 'volkswagen' || lower === 'vw') return 'Volkswagen';
   if (lower === 'renault') return 'Renault';
@@ -125,7 +125,7 @@ export function formatBrandDisplayName(brand?: string, title?: string): string {
 
   if (title) {
     const tLower = title.toLowerCase();
-    if (tLower.includes('mercedes')) return 'Mercedes-Benz';
+    if (tLower.includes('mercedes')) return 'Mercedes';
     if (tLower.includes('iveco')) return 'Iveco';
     if (tLower.includes('volkswagen') || tLower.includes('crafter')) return 'Volkswagen';
     if (tLower.includes('renault') || tLower.includes('master')) return 'Renault';

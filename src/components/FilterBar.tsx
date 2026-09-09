@@ -28,7 +28,7 @@ const YEARS_LIST = [
 
 const BRAND_OPTIONS: DropdownOption[] = [
   { value: 'Ford', label: 'Ford' },
-  { value: 'Mercedes-Benz', label: 'Mercedes-Benz' }
+  { value: 'Mercedes', label: 'Mercedes' }
 ];
 
 const BODY_TYPE_OPTIONS: DropdownOption[] = [

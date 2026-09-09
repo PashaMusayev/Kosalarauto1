@@ -2,8 +2,8 @@
   {
     "id": "car-1787228116616",
     "title": "Mercedes Spirinter",
-    "brand": "Mercedes-Benz",
-    "make": "Mercedes-Benz",
+    "brand": "Mercedes",
+    "make": "Mercedes",
     "model": "Transit",
     "city": "Bakı, Yeni Günəşli",
     "location": "Bakı, Yeni Günəşli",
@@ -63,9 +63,9 @@
     "specs": {
       "hp": 125,
       "city": "Bakı, Yeni Günəşli",
-      "make": "Mercedes-Benz",
+      "make": "Mercedes",
       "year": 2012,
-      "brand": "Mercedes-Benz",
+      "brand": "Mercedes",
       "color": "Sar;",
       "model": "Transit",
       "price": 30000,

@@ -115,7 +115,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           <span>Hələ heç bir şəkil əlavə edilməyib. 'Kompüterdən şəkil seç' düyməsindən istifadə edin.</span>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 pt-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 pt-1">
           {imagesList.map((item, i) => {
             const isPrimary = i === 0;
             const isDragged = draggedImgIndex === i;
@@ -245,7 +245,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                   </div>
                 </div>
 
-                {/* Toolbar Buttons: Left / Make Primary / Right / Delete (Mobile Touch-Friendly) */}
+                {/* Toolbar Buttons: Left / Right / Delete (Fixed 3-Button Layout) */}
                 <div className="p-1.5 sm:p-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between gap-1">
                   <div className="flex items-center gap-1">
                     <button
@@ -277,28 +277,19 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    {!isPrimary && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); onSetAsPrimaryImage(i); }}
-                        className="px-2.5 py-1.5 min-h-[36px] rounded-lg text-xs font-bold bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 transition-all flex items-center gap-1 active:scale-95"
-                        title="1-ci sıraya çək və əsas şəkil et"
-                      >
-                        <Star className="w-3.5 h-3.5" />
-                        <span>#1 et</span>
-                      </button>
-                    )}
-                    
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onRemoveImageAt(i); }}
-                      className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-rose-400 hover:text-rose-200 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/40 transition-colors ml-auto active:scale-95"
-                      title="Şəkli sil"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`#${i + 1} nömrəli şəkli silmək istədiyinizə əminsiniz?`)) {
+                        onRemoveImageAt(i);
+                      }
+                    }}
+                    className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-rose-400 hover:text-rose-200 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/40 transition-colors ml-auto active:scale-95 shrink-0"
+                    title="Şəkli sil"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             );

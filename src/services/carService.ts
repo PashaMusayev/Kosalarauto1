@@ -10,7 +10,7 @@ function normalizeBrand(brandRaw?: string, title?: string): string {
   const raw = (brandRaw || '').trim();
   const lower = raw.toLowerCase();
   if (lower === 'ford') return 'Ford';
-  if (lower === 'mercedes' || lower === 'mercedes-benz' || lower === 'mercedes benz') return 'Mercedes-Benz';
+  if (lower === 'mercedes' || lower === 'mercedes-benz' || lower === 'mercedes benz') return 'Mercedes';
   if (lower === 'iveco') return 'Iveco';
   if (lower === 'volkswagen' || lower === 'vw') return 'Volkswagen';
   if (lower === 'renault') return 'Renault';
@@ -21,7 +21,7 @@ function normalizeBrand(brandRaw?: string, title?: string): string {
 
   if (title) {
     const tLower = title.toLowerCase();
-    if (tLower.includes('mercedes')) return 'Mercedes-Benz';
+    if (tLower.includes('mercedes')) return 'Mercedes';
     if (tLower.includes('iveco')) return 'Iveco';
     if (tLower.includes('volkswagen') || tLower.includes('crafter')) return 'Volkswagen';
     if (tLower.includes('renault') || tLower.includes('master')) return 'Renault';
@@ -101,7 +101,7 @@ export function mapSupabaseRowToCar(row: Record<string, unknown>): TransitCar {
  * Maps TransitCar to Supabase DB record
  */
 export function mapCarToSupabaseRow(car: TransitCar): Record<string, unknown> {
-  const brand = car.brand || car.make || (car.title?.toLowerCase().includes('mercedes') ? 'Mercedes-Benz' : 'Ford');
+  const brand = car.brand || car.make || (car.title?.toLowerCase().includes('mercedes') ? 'Mercedes' : 'Ford');
   const model = car.model || (car.title?.toLowerCase().includes('sprinter') ? 'Sprinter' : 'Transit');
   const city = car.city || car.location || 'Bakı';
   const condition = car.condition || 'Vuruğu yoxdur, rənglənməyib';

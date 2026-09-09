@@ -332,12 +332,15 @@ export default function App() {
         return false;
       }
 
-      // 1. Brand filter (Ford, Mercedes-Benz etc.)
+      // 1. Brand filter (Ford, Mercedes etc.)
       if (selectedBrands.length > 0) {
         const carBrand = (car.brand || car.make || '').toLowerCase().trim();
         const carTitle = (car.title || '').toLowerCase().trim();
         const brandMatch = selectedBrands.some(b => {
           const tb = b.toLowerCase().trim();
+          if (tb === 'mercedes' || tb === 'mercedes-benz') {
+            return carBrand.includes('mercedes') || carTitle.includes('mercedes');
+          }
           return carBrand.includes(tb) || carTitle.includes(tb);
         });
         if (!brandMatch) return false;
