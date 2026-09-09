@@ -91,5 +91,5 @@ export const WHATSAPP_NUMBER = '994707880011';
 export const WHATSAPP_AUTO_MESSAGE = 'Salam! Saytdan yazıram. Avtomobillər haqqında ətraflı məlumat almaq istəyirdim.';
 export const WHATSAPP_DIRECT_LINK = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_AUTO_MESSAGE)}`;
 export const SHOWROOM_ADDRESS = 'Bakı şəhəri, Yeni Günəşli qəsəbəsi, Fatimeyi-Zəhra məscidinin yanı';
-export const SHOWROOM_MAP_URL = 'https://maps.app.goo.gl/EkhKj3dLuXEaayqZ8';
+export const SHOWROOM_MAP_URL = 'https://www.google.com/maps/search/?api=1&query=40.382921,49.977866';
 export const WORKING_HOURS = 'Bazar ertəsi - Bazar: 09:00 - 19:00';
