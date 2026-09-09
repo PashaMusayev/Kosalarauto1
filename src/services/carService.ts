@@ -239,37 +239,24 @@ export async function fetchAllCarsFromApi(): Promise<{ success: boolean; cars: T
 
 /**
  * Insert or Update single car via protected server API
- * Returns { success: true } or { success: false, error: string }
+ * Performs an atomic single-row upsert, avoiding full-table read-modify-replace race conditions.
+ * Returns { success: true, cars?: TransitCar[] } or { success: false, error: string }
  */
-export async function upsertCarToSupabase(car: TransitCar): Promise<{ success: boolean; error?: string }> {
+export async function upsertCarToSupabase(car: TransitCar): Promise<{ success: boolean; cars?: TransitCar[]; error?: string }> {
   try {
-    let updatedCars: TransitCar[] = [];
-    const apiResult = await fetchAllCarsFromApi();
-    if (apiResult.success && Array.isArray(apiResult.cars)) {
-      const found = apiResult.cars.some((c: TransitCar) => String(c.id) === String(car.id));
-      if (found) {
-        updatedCars = apiResult.cars.map((c: TransitCar) => String(c.id) === String(car.id) ? car : c);
-      } else {
-        updatedCars = [car, ...apiResult.cars];
-      }
-    }
-    if (updatedCars.length === 0) {
-      updatedCars = [car];
-    }
-
     const res = await fetch('/api/cars', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...getAdminAuthHeaders()
       },
-      body: JSON.stringify({ cars: updatedCars })
+      body: JSON.stringify({ car })
     });
     const data = await res.json();
     if (!res.ok || !data.success) {
       return { success: false, error: data?.error || 'Məlumat serverə yazıla bilmədi' };
     }
-    return { success: true };
+    return { success: true, cars: data.cars };
   } catch (err: unknown) {
     console.error('Car upsert exception:', err);
     const msg = err instanceof Error ? err.message : 'Məlumat yadda saxlanılmadı';
@@ -283,7 +270,7 @@ export async function upsertCarToSupabase(car: TransitCar): Promise<{ success: b
 export async function deleteCarFromSupabase(
   carOrId: string | TransitCar,
   optionalImages?: string[]
-): Promise<{ success: boolean; storageDeleted?: number; error?: string }> {
+): Promise<{ success: boolean; storageDeleted?: number; cars?: TransitCar[]; error?: string }> {
   const carId = typeof carOrId === 'string' ? carOrId : carOrId.id;
 
   try {
@@ -295,7 +282,7 @@ export async function deleteCarFromSupabase(
     }
 
     // 2. Delete car and associated storage files via protected server endpoint
-    const res = await fetch(`/api/cars/${carId}`, {
+    const res = await fetch(`/api/cars/${encodeURIComponent(carId)}`, {
       method: 'DELETE',
       headers: getAdminAuthHeaders()
     });
@@ -304,7 +291,7 @@ export async function deleteCarFromSupabase(
       return { success: false, error: data?.error || 'Avtomobil silinmədi' };
     }
 
-    return { success: true, storageDeleted: 1 };
+    return { success: true, storageDeleted: 1, cars: data.cars };
   } catch (err: unknown) {
     console.error('Car delete exception:', err);
     const msg = err instanceof Error ? err.message : 'Serverlə əlaqə xətası';
@@ -313,34 +300,26 @@ export async function deleteCarFromSupabase(
 }
 
 /**
- * Update single car status ('active' | 'sold') via protected server API
+ * Update single car status ('active' | 'sold') via atomic protected server endpoint
  */
 export async function updateCarStatusInSupabase(
   carId: string, 
   status: 'active' | 'sold'
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; cars?: TransitCar[]; error?: string }> {
   try {
-    let carsToSend: TransitCar[] | null = null;
-    const apiResult = await fetchAllCarsFromApi();
-    if (apiResult.success && Array.isArray(apiResult.cars)) {
-      carsToSend = apiResult.cars.map((c: TransitCar) => String(c.id) === String(carId) ? { ...c, status } : c);
+    const res = await fetch(`/api/cars/${encodeURIComponent(carId)}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAdminAuthHeaders()
+      },
+      body: JSON.stringify({ status })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data?.error || 'Status yenilənmədi' };
     }
-    if (carsToSend) {
-      const res = await fetch('/api/cars', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeaders()
-        },
-        body: JSON.stringify({ cars: carsToSend })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        return { success: false, error: data?.error || 'Status yenilənmədi' };
-      }
-      return { success: true };
-    }
-    return { success: false, error: 'Avtomobil tapılmadı' };
+    return { success: true, cars: data.cars };
   } catch (err: unknown) {
     console.error('Status update exception:', err);
     const msg = err instanceof Error ? err.message : 'Serverlə əlaqə xətası';

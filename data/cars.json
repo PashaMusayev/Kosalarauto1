@@ -12,8 +12,10 @@
     "mileage": 215000,
     "engine": "2.2 l",
     "hp": 125,
+    "horsePower": 125,
     "transmission": "6-Pilləli Mexanika",
     "wheelDrive": "Arxa çəkən (RWD)",
+    "driveType": "Arxa çəkən (RWD)",
     "bodyType": "Yük furqonu",
     "baseLength": "3.30 m",
     "roofHeight": "Hündür dam",
@@ -51,8 +53,34 @@
       "Gömrük olunub",
       "Zəmanətli"
     ],
+    "badges": [
+      "Vuruqsuz",
+      "Gömrük olunub",
+      "Zəmanətli"
+    ],
     "isFeatured": true,
-    "status": "active"
+    "status": "active",
+    "specs": {
+      "hp": 125,
+      "city": "Bakı, Yeni Günəşli",
+      "make": "Mercedes-Benz",
+      "year": 2012,
+      "brand": "Mercedes-Benz",
+      "color": "Sar;",
+      "model": "Transit",
+      "price": 30000,
+      "engine": "2.2 l",
+      "mileage": 215000,
+      "vinCode": "WF0XXXTTFX29785",
+      "bodyType": "Yük furqonu",
+      "fuelType": "Dizel",
+      "location": "Bakı, Yeni Günəşli",
+      "condition": "Vuruğu yoxdur, rənglənməyib",
+      "baseLength": "3.30 m",
+      "roofHeight": "Hündür dam",
+      "wheelDrive": "Arxa çəkən (RWD)",
+      "transmission": "6-Pilləli Mexanika"
+    }
   },
   {
     "id": "car-1788006552051",
@@ -67,8 +95,10 @@
     "mileage": 215000,
     "engine": "2.2 TDCi Euro 5",
     "hp": 125,
+    "horsePower": 125,
     "transmission": "Mexaniki",
     "wheelDrive": "Ön çəkən (FWD)",
+    "driveType": "Ön çəkən (FWD)",
     "bodyType": "Yük furqonu",
     "baseLength": "3.30 m",
     "roofHeight": "Hündür dam",
@@ -90,8 +120,34 @@
       "Gömrük olunub",
       "Zəmanətli"
     ],
+    "badges": [
+      "Vuruqsuz",
+      "Gömrük olunub",
+      "Zəmanətli"
+    ],
     "isFeatured": false,
-    "status": "sold"
+    "status": "sold",
+    "specs": {
+      "hp": 125,
+      "city": "Bakı",
+      "make": "Ford",
+      "year": 2012,
+      "brand": "Ford",
+      "color": "Ağ",
+      "model": "Transit",
+      "price": 18500,
+      "engine": "2.2 TDCi Euro 5",
+      "mileage": 215000,
+      "vinCode": "WF0XXXTTFX43907998",
+      "bodyType": "Yük furqonu",
+      "fuelType": "Dizel",
+      "location": "Bakı",
+      "condition": "Vuruğu yoxdur, rənglənməyib",
+      "baseLength": "3.30 m",
+      "roofHeight": "Hündür dam",
+      "wheelDrive": "Ön çəkən (FWD)",
+      "transmission": "Mexaniki"
+    }
   },
   {
     "id": "car-1787234290103",
@@ -106,8 +162,10 @@
     "mileage": 215000,
     "engine": "2.2 L",
     "hp": 130,
+    "horsePower": 130,
     "transmission": "6-Pilləli Mexanika",
     "wheelDrive": "Arxa çəkən (RWD)",
+    "driveType": "Arxa çəkən (RWD)",
     "bodyType": "Yük furqonu",
     "baseLength": "3.30 m",
     "roofHeight": "Orta dam",
@@ -147,7 +205,33 @@
       "Gömrük olunub",
       "Zəmanətli"
     ],
+    "badges": [
+      "Vuruqsuz",
+      "Gömrük olunub",
+      "Zəmanətli"
+    ],
     "isFeatured": false,
-    "status": "active"
+    "status": "active",
+    "specs": {
+      "hp": 130,
+      "city": "Bakı, Yeni Günəşli",
+      "make": "Ford",
+      "year": 2011,
+      "brand": "Ford",
+      "color": "Ağ",
+      "model": "Transit",
+      "price": 29000,
+      "engine": "2.2 L",
+      "mileage": 215000,
+      "vinCode": "WF0XXXTTFX40458499",
+      "bodyType": "Yük furqonu",
+      "fuelType": "Dizel",
+      "location": "Bakı, Yeni Günəşli",
+      "condition": "Vuruğu yoxdur, rənglənməyib",
+      "baseLength": "3.30 m",
+      "roofHeight": "Orta dam",
+      "wheelDrive": "Arxa çəkən (RWD)",
+      "transmission": "6-Pilləli Mexanika"
+    }
   }
 ]

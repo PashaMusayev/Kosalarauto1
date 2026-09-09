@@ -175,9 +175,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         return;
       }
 
-      const updated = carsList.map(c => c.id === car.id ? { ...c, status: nextStatus } : c);
+      const updated = res.cars && Array.isArray(res.cars)
+        ? res.cars
+        : carsList.map(c => c.id === car.id ? { ...c, status: nextStatus } : c);
       setCarsList(updated);
       onCarsUpdated(updated);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('kosalar-cars-updated', { detail: { cars: updated } }));
+      }
 
       showToast(
         nextStatus === 'sold'
@@ -585,9 +591,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         message: 'Uğurla tamamlandı!'
       });
 
-      // Update state
+      // Update state using authoritative list if returned, or atomic local update
       let updated: TransitCar[];
-      if (editingCarId) {
+      if (dbResult.cars && Array.isArray(dbResult.cars)) {
+        updated = dbResult.cars;
+      } else if (editingCarId) {
         updated = carsList.map(c => c.id === editingCarId ? carToSave : c);
       } else {
         updated = [carToSave, ...carsList];
@@ -595,15 +603,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setCarsList(updated);
       onCarsUpdated(updated);
 
-      // Sync with server API & Broadcast
-      fetch('/api/cars', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeaders()
-        },
-        body: JSON.stringify({ cars: updated })
-      }).catch(e => console.warn('Server sync notification:', e));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('kosalar-cars-updated', { detail: { cars: updated } }));
+      }
 
       showToast(totalPending > 0 
         ? `${totalPending} ədəd sıxılmış WebP şəkil və elan məlumatları uğurla Supabase-ə yazıldı!`
@@ -631,7 +633,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         throw new Error(res.error || 'Avtomobil silinmədi');
       }
 
-      const updated = carsList.filter(c => String(c.id) !== String(carId));
+      const updated = res.cars && Array.isArray(res.cars)
+        ? res.cars
+        : carsList.filter(c => String(c.id) !== String(carId));
       setCarsList(updated);
       onCarsUpdated(updated);
 

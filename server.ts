@@ -413,6 +413,14 @@ const DEFAULT_SERVER_CARS = [
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'cars.json');
 
+// Serialized write lock for disk-only fallback operations to prevent race conditions
+let writeQueue: Promise<unknown> = Promise.resolve();
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const res = writeQueue.then(fn, fn);
+  writeQueue = res.then(() => {}, () => {});
+  return res;
+}
+
 function getCarsFromDisk() {
   try {
     if (fs.existsSync(DATA_FILE)) {
@@ -437,6 +445,144 @@ function saveCarsToDisk(cars: unknown[]) {
   } catch (err) {
     console.warn('Could not save cars to disk:', err);
   }
+}
+
+/**
+ * Formats a raw Supabase cars table row into a standard TransitCar model.
+ */
+function formatSupabaseCarRow(row: Record<string, any>): Record<string, unknown> {
+  const specs = (typeof row.specs === 'object' && row.specs !== null) ? (row.specs as Record<string, unknown>) : {};
+  const rawBrand = String(row.brand || row.make || specs.brand || specs.make || ((row.title as string)?.toLowerCase().includes('mercedes') ? 'Mercedes-Benz' : 'Ford'));
+  const rawModel = String(row.model || specs.model || ((row.title as string)?.toLowerCase().includes('sprinter') ? 'Sprinter' : 'Transit'));
+  const city = String(row.city || row.location || specs.city || specs.location || 'Bakı');
+  const condition = String(row.condition || specs.condition || 'Vuruğu yoxdur, rənglənməyib');
+
+  return {
+    id: String(row.id),
+    title: String(row.title || `${rawBrand} ${rawModel}`),
+    brand: rawBrand,
+    make: rawBrand,
+    model: rawModel,
+    city: city,
+    location: city,
+    year: Number(row.year || specs.year) || 2011,
+    price: Number(row.price || specs.price) || 0,
+    mileage: Number(row.mileage || specs.mileage) || 0,
+    engine: String(row.engine || specs.engine || '2.2 TDCi'),
+    hp: Number(row.horse_power || row.horsePower || row.hp || specs.hp) || 125,
+    horsePower: Number(row.horse_power || row.horsePower || row.hp || specs.hp) || 125,
+    transmission: String(row.transmission || specs.transmission || 'Mexaniki'),
+    wheelDrive: String(row.drive_type || row.driveType || row.wheelDrive || specs.wheelDrive || 'Ön çəkən (FWD)'),
+    driveType: String(row.drive_type || row.driveType || row.wheelDrive || specs.wheelDrive || 'Ön çəkən (FWD)'),
+    bodyType: String(row.body_type || row.bodyType || specs.bodyType || specs.body_type || 'Yük furqonu'),
+    baseLength: String(row.base_length || row.baseLength || specs.baseLength || specs.base_length || '3.30 m'),
+    roofHeight: String(row.roof_height || row.roofHeight || specs.roofHeight || specs.roof_height || 'Hündür dam'),
+    color: String(row.color || specs.color || 'Ağ'),
+    fuelType: String(row.fuel_type || row.fuelType || specs.fuelType || 'Dizel'),
+    condition: condition,
+    vinCode: String(row.vin_code || row.vinCode || specs.vinCode || specs.vin_code || ''),
+    primaryImage: String(row.primary_image || row.primaryImage || ''),
+    images: Array.isArray(row.images) ? row.images : (row.primary_image ? [String(row.primary_image)] : []),
+    description: String(row.description || specs.description || ''),
+    features: Array.isArray(row.features) ? row.features : (Array.isArray(specs.features) ? specs.features : []),
+    statusBadges: Array.isArray(row.badges) ? row.badges : (Array.isArray(row.statusBadges) ? row.statusBadges : ['Vuruqsuz', 'Gömrük olunub', 'Zəmanətli']),
+    badges: Array.isArray(row.badges) ? row.badges : (Array.isArray(row.statusBadges) ? row.statusBadges : ['Vuruqsuz', 'Gömrük olunub', 'Zəmanətli']),
+    isFeatured: Boolean(row.is_featured ?? row.isFeatured ?? specs.isFeatured),
+    status: row.status === 'sold' ? 'sold' : 'active',
+    specs: specs
+  };
+}
+
+/**
+ * Maps a validated, sanitized car object to a single Supabase database row.
+ */
+function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string, unknown> {
+  const brand = (c.brand as string) || (c.make as string) || ((c.title as string)?.toLowerCase().includes('mercedes') ? 'Mercedes-Benz' : 'Ford');
+  const model = (c.model as string) || ((c.title as string)?.toLowerCase().includes('sprinter') ? 'Sprinter' : 'Transit');
+  const city = (c.city as string) || (c.location as string) || 'Bakı';
+  const condition = (c.condition as string) || 'Vuruğu yoxdur, rənglənməyib';
+  const primaryImage = (c.primaryImage as string) || ((Array.isArray(c.images) && typeof c.images[0] === 'string') ? c.images[0] : '');
+
+  return {
+    id: String(c.id),
+    title: c.title || `${brand} ${model}`,
+    brand: brand,
+    make: brand,
+    model: model,
+    city: city,
+    location: city,
+    year: Number(c.year) || 2011,
+    price: Number(c.price) || 0,
+    mileage: Number(c.mileage) || 0,
+    engine: c.engine || '2.2 TDCi',
+    horse_power: Number((c.horsePower as number) || (c.hp as number) || 125),
+    transmission: c.transmission || 'Mexaniki',
+    drive_type: c.wheelDrive || c.driveType || 'Ön çəkən (FWD)',
+    body_type: c.bodyType || 'Yük furqonu',
+    base_length: c.baseLength || '3.30 m',
+    roof_height: c.roofHeight || 'Hündür dam',
+    color: c.color || 'Ağ',
+    fuel_type: c.fuelType || 'Dizel',
+    condition: condition,
+    vin_code: (c.vinCode as string) || '',
+    primary_image: primaryImage,
+    images: Array.isArray(c.images) ? c.images : (primaryImage ? [primaryImage] : []),
+    description: c.description || '',
+    features: Array.isArray(c.features) ? c.features : [],
+    badges: Array.isArray(c.statusBadges || c.badges) ? (c.statusBadges || c.badges) : ['Vuruqsuz', 'Gömrük olunub', 'Zəmanətli'],
+    is_featured: Boolean(c.isFeatured),
+    status: c.status === 'sold' ? 'sold' : 'active',
+    specs: (typeof c.specs === 'object' && c.specs !== null) ? c.specs : {
+      brand,
+      make: brand,
+      model,
+      city,
+      location: city,
+      condition,
+      baseLength: c.baseLength,
+      roofHeight: c.roofHeight,
+      transmission: c.transmission,
+      wheelDrive: c.wheelDrive,
+      engine: c.engine,
+      hp: c.hp,
+      color: c.color,
+      fuelType: c.fuelType,
+      bodyType: c.bodyType,
+      year: c.year,
+      mileage: c.mileage,
+      price: c.price,
+      vinCode: c.vinCode
+    },
+    updated_at: new Date().toISOString()
+  };
+}
+
+/**
+ * Re-fetches the authoritative full list of cars from Supabase and refreshes data/cars.json.
+ * Uses withWriteLock to prevent concurrent disk writes from interleaving.
+ */
+async function refreshDiskCacheFromSupabase(supabase: SupabaseClient): Promise<Record<string, unknown>[]> {
+  try {
+    const { data, error } = await supabase
+      .from('cars')
+      .select('*')
+      .order('is_featured', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (!error && Array.isArray(data)) {
+      const formattedCars = data.map(formatSupabaseCarRow);
+      await withWriteLock(async () => {
+        saveCarsToDisk(formattedCars);
+      });
+      return formattedCars;
+    } else if (error) {
+      console.warn('Could not re-fetch authoritative cars from Supabase:', error.message);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown Supabase fetch error';
+    console.warn('Exception while refreshing disk cache from Supabase:', msg);
+  }
+  return getCarsFromDisk();
 }
 
 async function startServer() {
@@ -505,48 +651,17 @@ async function startServer() {
           .order('created_at', { ascending: false });
 
         if (!error && Array.isArray(data) && data.length > 0) {
-          // Normalize rows
-          const formattedCars = (data as Record<string, unknown>[]).map(row => {
-            const rawBrand = (row.brand as string) || ((row.title as string)?.toLowerCase().includes('mercedes') ? 'Mercedes-Benz' : 'Ford');
-            const rawModel = (row.model as string) || ((row.title as string)?.toLowerCase().includes('sprinter') ? 'Sprinter' : 'Transit');
-            const city = row.city || row.location || 'Bakı';
-            return {
-              id: String(row.id),
-              title: row.title || `${rawBrand} ${rawModel}`,
-              brand: rawBrand,
-              make: rawBrand,
-              model: rawModel,
-              city: city,
-              location: city,
-              year: Number(row.year) || 2011,
-              price: Number(row.price) || 0,
-              mileage: Number(row.mileage) || 0,
-              engine: row.engine || '2.2 TDCi',
-              hp: Number(row.horse_power || row.horsePower || row.hp) || 125,
-              transmission: row.transmission || 'Mexaniki',
-              wheelDrive: row.drive_type || row.driveType || row.wheelDrive || 'Ön çəkən (FWD)',
-              bodyType: row.body_type || row.bodyType || 'Yük furqonu',
-              baseLength: row.base_length || row.baseLength || '3.30 m',
-              roofHeight: row.roof_height || row.roofHeight || 'Hündür dam',
-              color: row.color || 'Ağ',
-              fuelType: row.fuel_type || row.fuelType || 'Dizel',
-              condition: row.condition || 'Vuruğu yoxdur, rənglənməyib',
-              vinCode: row.vin_code || row.vinCode || '',
-              primaryImage: row.primary_image || row.primaryImage || '',
-              images: Array.isArray(row.images) ? row.images : (row.primary_image ? [row.primary_image] : []),
-              description: row.description || '',
-              features: Array.isArray(row.features) ? row.features : [],
-              statusBadges: Array.isArray(row.badges) ? row.badges : (Array.isArray(row.statusBadges) ? row.statusBadges : ['Vuruqsuz', 'Gömrük olunub', 'Zəmanətli']),
-              isFeatured: Boolean(row.is_featured ?? row.isFeatured),
-              status: row.status === 'sold' ? 'sold' : 'active'
-            };
-          });
-          saveCarsToDisk(formattedCars);
+          const formattedCars = data.map(formatSupabaseCarRow);
+          // Async update disk cache without blocking response
+          withWriteLock(async () => {
+            saveCarsToDisk(formattedCars);
+          }).catch(() => {});
           res.json({ success: true, cars: formattedCars, source: 'supabase' });
           return;
         }
-      } catch (sbErr) {
-        console.warn('Supabase fetch failed in /api/cars, using local store:', sbErr);
+      } catch (sbErr: unknown) {
+        const msg = sbErr instanceof Error ? sbErr.message : 'Supabase query error';
+        console.warn('Supabase fetch failed in /api/cars, using local store:', msg);
       }
     }
 
@@ -590,9 +705,103 @@ async function startServer() {
     res.status(401).json({ success: false, error: 'Sessiyanızın vaxtı bitib və ya icazəniz yoxdur. Zəhmət olmasa yenidən daxil olun.' });
   };
 
-  // Protected: Save / Update Cars Catalog
+  // Protected: Save / Update Cars Catalog (Atomic single-row operations + authoritative cache refresh)
   app.post('/api/cars', requireAdminAuth, async (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
+    // Case 1: Status toggle sent to /api/cars { carId, status } or { id, status }
+    const statusCarId = (req.body.carId || req.body.id) as string | undefined;
+    if (statusCarId && req.body.status && (req.body.status === 'active' || req.body.status === 'sold')) {
+      const cleanCarId = String(statusCarId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+      const nextStatus: 'active' | 'sold' = req.body.status === 'sold' ? 'sold' : 'active';
+
+      const supabase = getServerSupabase();
+      if (supabase) {
+        try {
+          const { error: sbErr } = await supabase
+            .from('cars')
+            .update({
+              status: nextStatus,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', cleanCarId);
+
+          if (!sbErr) {
+            const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+            res.json({ success: true, carId: cleanCarId, status: nextStatus, cars: authoritativeCars });
+            return;
+          }
+          console.warn('Supabase status update error in POST /api/cars:', sbErr.message);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Supabase status error';
+          console.warn('Supabase status update exception in POST /api/cars:', msg);
+        }
+      }
+
+      // Disk-only degraded fallback with serialized mutex
+      const updatedCars = await withWriteLock(async () => {
+        const currentCars = getCarsFromDisk();
+        const nextCars = currentCars.map((c: Record<string, unknown>) => 
+          String(c.id) === String(cleanCarId) ? { ...c, status: nextStatus } : c
+        );
+        saveCarsToDisk(nextCars);
+        return nextCars;
+      });
+
+      res.json({ success: true, carId: cleanCarId, status: nextStatus, cars: updatedCars, source: 'local' });
+      return;
+    }
+
+    // Case 2: Single car object { car: { ... } } OR single car array { cars: [ { ... } ] }
+    const rawSingleCar = req.body.car || (Array.isArray(req.body.cars) && req.body.cars.length === 1 ? req.body.cars[0] : null);
+
+    if (rawSingleCar && typeof rawSingleCar === 'object') {
+      const validation = validateAndSanitizeCars([rawSingleCar]);
+      if (!validation.valid || !validation.sanitized || validation.sanitized.length === 0) {
+        res.status(400).json({ error: validation.error || 'Daxil edilən elan məlumatları düzgün formatda deyil' });
+        return;
+      }
+
+      const sanitizedCar = validation.sanitized[0];
+      const supabase = getServerSupabase();
+
+      if (supabase) {
+        try {
+          const row = mapSanitizedCarToSupabaseRow(sanitizedCar);
+          // Atomic single-row upsert touching ONLY this car's row
+          const { error: sbErr } = await supabase.from('cars').upsert(row, { onConflict: 'id' });
+          if (!sbErr) {
+            // Re-fetch authoritative list FROM SUPABASE to refresh disk cache
+            const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+            res.json({ success: true, car: sanitizedCar, cars: authoritativeCars });
+            return;
+          }
+          console.warn('Supabase single-car upsert error:', sbErr.message);
+        } catch (sbErr: unknown) {
+          const msg = sbErr instanceof Error ? sbErr.message : 'Supabase upsert error';
+          console.warn('Failed to upsert single car to Supabase:', msg);
+        }
+      }
+
+      // Disk-only degraded fallback with serialized mutex
+      const updatedCars = await withWriteLock(async () => {
+        const currentCars = getCarsFromDisk();
+        const existingIdx = currentCars.findIndex((c: Record<string, unknown>) => String(c.id) === String(sanitizedCar.id));
+        let nextCars: Record<string, unknown>[];
+        if (existingIdx >= 0) {
+          nextCars = currentCars.map((c: Record<string, unknown>, i: number) => i === existingIdx ? sanitizedCar : c);
+        } else {
+          nextCars = [sanitizedCar, ...currentCars];
+        }
+        saveCarsToDisk(nextCars);
+        return nextCars;
+      });
+
+      res.json({ success: true, car: sanitizedCar, cars: updatedCars, source: 'local' });
+      return;
+    }
+
+    // Case 3: Batch array of multiple cars (legacy / initial sync support)
     const { cars } = req.body;
     const validation = validateAndSanitizeCars(cars);
     if (!validation.valid || !validation.sanitized) {
@@ -601,50 +810,80 @@ async function startServer() {
     }
 
     const sanitizedCars = validation.sanitized;
-
-    // Always update local disk
-    saveCarsToDisk(sanitizedCars);
-
-    // Sync to Supabase if client is ready
     const supabase = getServerSupabase();
+
     if (supabase) {
       try {
-        const rows = sanitizedCars.map((c: Record<string, unknown>) => ({
-          id: String(c.id),
-          title: c.title,
-          brand: (c.brand as string) || ((c.title as string)?.toLowerCase().includes('mercedes') ? 'mercedes' : 'ford'),
-          model: c.model || 'Transit',
-          year: Number(c.year),
-          price: Number(c.price),
-          mileage: Number(c.mileage),
-          engine: c.engine,
-          horse_power: Number((c.horsePower as number) || (c.hp as number) || 125),
-          transmission: c.transmission,
-          drive_type: c.driveType || c.wheelDrive,
-          body_type: c.bodyType,
-          base_length: c.baseLength,
-          roof_height: c.roofHeight,
-          color: c.color,
-          primary_image: c.primaryImage,
-          images: Array.isArray(c.images) ? c.images : [],
-          description: c.description || '',
-          features: Array.isArray(c.features) ? c.features : [],
-          badges: Array.isArray(c.badges || c.statusBadges) ? (c.badges || c.statusBadges) : [],
-          is_featured: Boolean(c.isFeatured),
-          status: c.status === 'sold' ? 'sold' : 'active',
-          updated_at: new Date().toISOString()
-        }));
-
+        const rows = sanitizedCars.map(mapSanitizedCarToSupabaseRow);
         const { error } = await supabase.from('cars').upsert(rows, { onConflict: 'id' });
-        if (error) {
-          console.warn('Supabase batch upsert warning:', error.message);
+        if (!error) {
+          const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+          res.json({ success: true, cars: authoritativeCars });
+          return;
         }
-      } catch (sbErr) {
-        console.warn('Failed to sync cars to Supabase:', sbErr);
+        console.warn('Supabase batch upsert warning:', error.message);
+      } catch (sbErr: unknown) {
+        const msg = sbErr instanceof Error ? sbErr.message : 'Batch upsert error';
+        console.warn('Failed to sync cars batch to Supabase:', msg);
       }
     }
 
-    res.json({ success: true, cars: sanitizedCars });
+    // Disk fallback with serialized mutex
+    const updatedCars = await withWriteLock(async () => {
+      saveCarsToDisk(sanitizedCars);
+      return sanitizedCars;
+    });
+
+    res.json({ success: true, cars: updatedCars, source: 'local' });
+  });
+
+  // Protected: Atomic Status Toggle Endpoint (PATCH /api/cars/:id/status)
+  app.patch('/api/cars/:id/status', requireAdminAuth, async (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    const rawId = req.params.id;
+    if (!rawId) {
+      res.status(400).json({ error: 'Avtomobil ID tələb olunur' });
+      return;
+    }
+
+    const carId = String(rawId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+    const nextStatus: 'active' | 'sold' = req.body.status === 'sold' ? 'sold' : 'active';
+
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        // Atomic single-row update touching ONLY this car's status
+        const { error: sbErr } = await supabase
+          .from('cars')
+          .update({
+            status: nextStatus,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', carId);
+
+        if (!sbErr) {
+          const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+          res.json({ success: true, carId, status: nextStatus, cars: authoritativeCars });
+          return;
+        }
+        console.warn('Supabase status update error in PATCH /api/cars/:id/status:', sbErr.message);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Supabase status error';
+        console.warn('Supabase status update exception:', msg);
+      }
+    }
+
+    // Disk fallback with serialized mutex
+    const updatedCars = await withWriteLock(async () => {
+      const currentCars = getCarsFromDisk();
+      const nextCars = currentCars.map((c: Record<string, unknown>) => 
+        String(c.id) === String(carId) ? { ...c, status: nextStatus } : c
+      );
+      saveCarsToDisk(nextCars);
+      return nextCars;
+    });
+
+    res.json({ success: true, carId, status: nextStatus, cars: updatedCars, source: 'local' });
   });
 
   // Protected: Delete car endpoint with Supabase Storage and DB cleanup
@@ -659,16 +898,10 @@ async function startServer() {
     const carId = String(rawId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
 
     try {
-      // 1. Remove from local disk/cache
-      const currentCars = getCarsFromDisk();
-      const updatedCars = currentCars.filter((c: Record<string, unknown>) => String(c.id) !== String(carId));
-      saveCarsToDisk(updatedCars);
-
-      // 2. Remove from Supabase DB & Storage if configured
       const supabase = getServerSupabase();
       if (supabase) {
         try {
-          // Get car images first
+          // Get car images first for storage cleanup
           const { data: dbCar } = await supabase
             .from('cars')
             .select('primary_image, images')
@@ -700,14 +933,30 @@ async function startServer() {
             }
           }
 
-          // Delete DB row
-          await supabase.from('cars').delete().eq('id', carId);
-        } catch (sbErr) {
-          console.warn('Server Supabase car delete sync warning:', sbErr);
+          // Atomic delete of targeted DB row
+          const { error: sbErr } = await supabase.from('cars').delete().eq('id', carId);
+          if (!sbErr) {
+            // Re-fetch authoritative list from Supabase and refresh disk cache
+            const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+            res.json({ success: true, message: 'Avtomobil uğurla silindi', cars: authoritativeCars });
+            return;
+          }
+          console.warn('Server Supabase car delete sync warning:', sbErr.message);
+        } catch (sbErr: unknown) {
+          const msg = sbErr instanceof Error ? sbErr.message : 'Supabase delete error';
+          console.warn('Server Supabase car delete sync exception:', msg);
         }
       }
 
-      res.json({ success: true, message: 'Avtomobil uğurla silindi' });
+      // Disk fallback with serialized mutex
+      const updatedCars = await withWriteLock(async () => {
+        const currentCars = getCarsFromDisk();
+        const nextCars = currentCars.filter((c: Record<string, unknown>) => String(c.id) !== String(carId));
+        saveCarsToDisk(nextCars);
+        return nextCars;
+      });
+
+      res.json({ success: true, message: 'Avtomobil uğurla silindi', cars: updatedCars, source: 'local' });
     } catch (err: unknown) {
       console.error('Server car delete error:', err);
       res.status(500).json({ error: 'Silinmə zamanı xəta baş verdi' });
