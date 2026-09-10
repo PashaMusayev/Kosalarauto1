@@ -21,7 +21,7 @@ interface SlideItemProps {
   safeTitle: string;
   isLightbox: boolean;
   isPreloadAllowed: boolean;
-  onSlideClick: (e: React.MouseEvent) => void;
+  onSlideClick: (e: React.MouseEvent<HTMLDivElement>) => void;
   onZoomChange?: (isZoomed: boolean) => void;
 }
 
@@ -60,11 +60,6 @@ const SlideItem = React.memo<SlideItemProps>(({
   const isPanningRef = useRef(false);
   const isPinchingRef = useRef(false);
   const lastTapTimeRef = useRef(0);
-
-  // Mouse desktop drag tracking
-  const isMouseDownRef = useRef(false);
-  const mouseStartRef = useRef({ x: 0, y: 0 });
-  const mouseStartTranslateRef = useRef({ x: 0, y: 0 });
 
   // Sync internal refs
   scaleRef.current = scale;
@@ -318,65 +313,17 @@ const SlideItem = React.memo<SlideItemProps>(({
     };
   }, [isActive, isLightbox, handleResetZoom, handleToggleZoom, applyTransform, onZoomChange]);
 
-  // Desktop double-click to toggle zoom
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    if (!isLightbox) return;
-    e.stopPropagation();
-    handleToggleZoom(e.clientX, e.clientY);
-  };
-
-  // Desktop mouse drag pan when zoomed
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isLightbox || scaleRef.current <= 1.02) return;
-    e.stopPropagation();
-    isMouseDownRef.current = true;
-    mouseStartRef.current = { x: e.clientX, y: e.clientY };
-    mouseStartTranslateRef.current = { ...translateRef.current };
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isMouseDownRef.current || scaleRef.current <= 1.02 || !containerRef.current) return;
-    e.stopPropagation();
-    const dx = e.clientX - mouseStartRef.current.x;
-    const dy = e.clientY - mouseStartRef.current.y;
-    const rawX = mouseStartTranslateRef.current.x + dx;
-    const rawY = mouseStartTranslateRef.current.y + dy;
-
-    const rect = containerRef.current.getBoundingClientRect();
-    const maxX = Math.max(0, (rect.width * (scaleRef.current - 1)) / 2);
-    const maxY = Math.max(0, (rect.height * (scaleRef.current - 1)) / 2);
-
-    const clampedX = Math.max(-maxX, Math.min(maxX, rawX));
-    const clampedY = Math.max(-maxY, Math.min(maxY, rawY));
-
-    translateRef.current = { x: clampedX, y: clampedY };
-    applyTransform(scaleRef.current, clampedX, clampedY, false);
-  };
-
-  const handleMouseUp = () => {
-    if (isMouseDownRef.current && scaleRef.current > 1.02 && containerRef.current) {
-      isMouseDownRef.current = false;
-      setTranslate({ ...translateRef.current });
-      applyTransform(scaleRef.current, translateRef.current.x, translateRef.current.y, true);
-    }
-  };
-
   return (
     <div
       ref={containerRef}
       onClick={scale <= 1.02 ? onSlideClick : undefined}
-      onDoubleClick={handleDoubleClick}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
       className="flex-[0_0_100%] min-w-0 h-full w-full relative overflow-hidden p-0 m-0 flex items-center justify-center bg-black select-none"
       style={{
         width: '100%',
         height: '100%',
         backgroundColor: '#000000',
         touchAction: isLightbox && scale > 1.02 ? 'none' : 'pan-y',
-        cursor: isLightbox ? (scale > 1.02 ? 'grab' : 'zoom-in') : 'pointer',
+        cursor: 'pointer',
       }}
     >
       {/* Sleek Skeleton / Blur dark placeholder during initial download */}
@@ -661,16 +608,30 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     isPointerDownRef.current = false;
   };
 
-  // Open Lightbox only when clicked without dragging, synchronizing clicked index
-  const handleSlideClick = useCallback((slideIndex: number) => (e: React.MouseEvent) => {
+  // Open Lightbox only when clicked without dragging, synchronizing clicked index.
+  // In Lightbox, clicking left ~40% navigates to prev, right ~40% navigates to next.
+  const handleSlideClick = useCallback((slideIndex: number) => (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (dragDistanceRef.current < 8) {
-      onIndexChange(slideIndex);
-      if (onImageClick) {
-        onImageClick(slideIndex);
+      if (isLightbox) {
+        if (totalImages > 1) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const ratio = rect.width > 0 ? clickX / rect.width : 0.5;
+          if (ratio <= 0.4) {
+            handlePrev(e);
+          } else if (ratio >= 0.6) {
+            handleNext(e);
+          }
+        }
+      } else {
+        onIndexChange(slideIndex);
+        if (onImageClick) {
+          onImageClick(slideIndex);
+        }
       }
     }
-  }, [onImageClick, onIndexChange]);
+  }, [isLightbox, totalImages, handlePrev, handleNext, onIndexChange, onImageClick]);
 
   return (
     <div
@@ -689,7 +650,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     >
       {/* Embla Viewport */}
       <div 
-        className="overflow-hidden w-full h-full cursor-grab active:cursor-grabbing bg-black" 
+        className={`overflow-hidden w-full h-full bg-black ${isLightbox ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`} 
         ref={emblaRef}
       >
         <div 
