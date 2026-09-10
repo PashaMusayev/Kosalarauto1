@@ -9,9 +9,9 @@ export const Hero: React.FC<HeroProps> = () => {
   return (
     <section 
       id="hero" 
-      className="relative bg-gradient-to-b from-white via-slate-50 to-[#F8FAFC] text-[#0F172A] border-b border-slate-200 scroll-mt-20 sm:scroll-mt-24"
+      className="relative bg-[#F8FAFC] text-[#0F172A] scroll-mt-20 sm:scroll-mt-24"
     >
-      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3.5 text-center flex items-center justify-center">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-3 pb-1 text-center sm:text-left flex items-center justify-between">
         {/* Compact Single-Line-Height Title (H1) */}
         <h1 className="text-xs sm:text-sm md:text-base font-bold sm:font-extrabold tracking-tight text-[#0F172A] leading-tight">
           Azərbaycanda sürülməmiş{' '}

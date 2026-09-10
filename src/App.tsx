@@ -530,7 +530,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
       
       {/* Header */}
       <Header
@@ -548,8 +548,8 @@ export default function App() {
         />
 
         {/* Filter & Catalog Section */}
-        <section id="katalog" className="py-5 sm:py-7 lg:py-8 bg-[#F8FAFC] border-b border-slate-200 scroll-mt-20 sm:scroll-mt-24">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-3.5 sm:space-y-5">
+        <section id="katalog" className="py-4 sm:py-6 lg:py-7 bg-[#F8FAFC] scroll-mt-20 sm:scroll-mt-24">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-3 sm:space-y-4">
             
             {/* Search Filter Bar */}
             <FilterBar
@@ -571,19 +571,19 @@ export default function App() {
                   </h2>
                 </div>
 
-                <span className="text-xs font-bold text-[#0F172A] bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-xs self-start sm:self-auto">
+                <span className="text-xs font-bold text-[#0F172A] bg-white px-3.5 py-1.5 rounded-xl border border-slate-200/50 shadow-xs self-start sm:self-auto">
                   {isLoading ? 'Yüklənir...' : `Ümumi: ${filteredTransits.length} model`}
                 </span>
               </div>
 
               {isLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3 lg:gap-4">
-                  {Array.from({ length: 10 }).map((_, index) => (
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5 lg:gap-4">
+                  {Array.from({ length: 8 }).map((_, index) => (
                     <TransitCardSkeleton key={index} />
                   ))}
                 </div>
               ) : filteredTransits.length === 0 ? (
-                <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm max-w-xl mx-auto my-8 space-y-4">
+                <div className="bg-white rounded-2xl p-12 text-center border border-slate-200/60 shadow-sm max-w-xl mx-auto my-8 space-y-4">
                   <div className="w-16 h-16 rounded-2xl bg-blue-50 text-[#1D4ED8] flex items-center justify-center mx-auto">
                     <FilterX className="w-8 h-8" />
                   </div>
@@ -599,7 +599,7 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3 lg:gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5 lg:gap-4">
                   {filteredTransits.map((car, idx) => (
                     <TransitCard
                       key={car.id}
@@ -607,7 +607,7 @@ export default function App() {
                       onViewDetails={handleOpenDetail}
                       isFavorite={favorites.includes(car.id)}
                       onToggleFavorite={handleToggleFavorite}
-                      priority={idx < 5}
+                      priority={idx < 4}
                     />
                   ))}
                 </div>

@@ -5,7 +5,7 @@ import salonFoto from '../assets/images/Salonfoto.jpg';
 
 export const AboutUs: React.FC = () => {
   return (
-    <section id="haqqimizda" className="py-16 md:py-20 bg-[#F8FAFC] text-slate-800 border-b border-slate-200 scroll-mt-20 sm:scroll-mt-24">
+    <section id="haqqimizda" className="py-14 md:py-18 bg-[#F8FAFC] text-slate-800 scroll-mt-20 sm:scroll-mt-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">

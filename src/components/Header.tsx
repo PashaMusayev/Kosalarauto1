@@ -42,11 +42,11 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className={`sticky top-0 z-40 transition-all duration-300 ${
       isScrolled 
-        ? 'bg-white/95 backdrop-blur-md text-slate-900 shadow-md py-3 border-b border-slate-200' 
-        : 'bg-white text-slate-900 py-3.5 border-b border-slate-200'
+        ? 'bg-white/95 backdrop-blur-md text-slate-900 shadow-sm py-3' 
+        : 'bg-white text-slate-900 py-3.5'
     }`}>
       {/* Top micro bar for quick trust info */}
-      <div className="hidden lg:block bg-[#F8FAFC] text-slate-600 text-xs py-1.5 border-b border-slate-200 mb-2">
+      <div className="hidden lg:block bg-slate-50/80 text-slate-600 text-xs py-1.5 mb-2">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex justify-between items-center">
           <div className="flex items-center gap-6">
             <span className="flex items-center gap-1.5 text-slate-600 font-medium">
@@ -188,7 +188,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="sm:hidden bg-white border-b border-slate-200 px-4 pt-3 pb-6 mt-3 space-y-3 shadow-xl animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="sm:hidden bg-white px-4 pt-3 pb-6 mt-3 space-y-3 shadow-xl rounded-b-2xl animate-in fade-in slide-in-from-top-4 duration-200">
           <nav className="flex flex-col space-y-2">
             <button 
               onClick={() => handleLinkClick('hero')} 

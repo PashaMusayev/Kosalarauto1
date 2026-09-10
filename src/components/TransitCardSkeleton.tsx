@@ -2,7 +2,7 @@ import React from 'react';
 
 export const TransitCardSkeleton: React.FC = () => {
   return (
-    <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200/90 shadow-2xs flex flex-col overflow-hidden select-none pointer-events-none">
+    <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200/50 shadow-sm flex flex-col overflow-hidden select-none pointer-events-none">
       {/* Top Image Skeleton with Gray Shimmer */}
       <div className="relative aspect-[4/3] bg-slate-100 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-slate-100 via-slate-200/80 to-slate-100 animate-shimmer" />
@@ -28,7 +28,7 @@ export const TransitCardSkeleton: React.FC = () => {
         </div>
 
         {/* Bottom City / Date placeholder */}
-        <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between">
+        <div className="pt-1 flex items-center justify-between">
           <div className="h-2.5 w-14 bg-slate-100 rounded animate-pulse" />
         </div>
       </div>

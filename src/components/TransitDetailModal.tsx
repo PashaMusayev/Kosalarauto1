@@ -922,7 +922,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
                         <div
                           key={simCar.id}
                           onClick={() => handleSelectSimilarCar(simCar)}
-                          className="bg-white rounded-xl border border-slate-200 shadow-xs hover:shadow-md hover:border-blue-500/60 transition-all duration-200 flex flex-col overflow-hidden cursor-pointer group select-none"
+                          className="bg-white rounded-xl border border-slate-200/50 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col overflow-hidden cursor-pointer group select-none"
                           title={`${simTitle} - Baxmaq üçün klikləyin`}
                         >
                           {/* Image box (Turbo.az 4:3 aspect, bg-slate-100, object-cover) */}
@@ -986,7 +986,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
                             </div>
 
                             {/* Location & View CTA */}
-                            <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                            <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400">
                               <span className="truncate max-w-[90px] sm:max-w-[110px]">{simLocation}</span>
                               <span className="text-blue-600 font-bold group-hover:underline">Bax &rarr;</span>
                             </div>

@@ -47,7 +47,7 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
 
   return (
     <div 
-      className="bg-white rounded-lg sm:rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-md transition-all duration-200 flex flex-col overflow-hidden group hover:border-slate-300 cursor-pointer"
+      className="bg-white rounded-lg sm:rounded-xl border border-slate-200/50 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col overflow-hidden group cursor-pointer"
       onClick={() => onViewDetails(car)}
       onMouseEnter={handlePrefetch}
       onTouchStart={handlePrefetch}
@@ -132,7 +132,7 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
         </div>
 
         {/* Bottom City / Date */}
-        <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400">
+        <div className="pt-1 flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400">
           <span className="truncate text-slate-400 font-normal">
             {safeLocation}
           </span>
