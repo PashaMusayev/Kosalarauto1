@@ -517,10 +517,6 @@ export default function App() {
     setFavoritesOpen(true);
   }, []);
 
-  const handleBrowseCatalog = useCallback(() => {
-    scrollToSection('movcud-avtomobiller');
-  }, [scrollToSection]);
-
   const handleCallHero = useCallback(() => {
     scrollToSection('elaqe');
   }, [scrollToSection]);
@@ -548,7 +544,6 @@ export default function App() {
         
         {/* Hero Section */}
         <Hero
-          onBrowseCatalog={handleBrowseCatalog}
           onCall={handleCallHero}
         />
 
