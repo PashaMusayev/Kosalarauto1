@@ -745,29 +745,29 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
             </div>
 
             {/* Məzmun Gövdəsi: Turbo.az strukturu */}
-            <div className="p-4 sm:p-5 md:p-6 space-y-5 max-w-5xl mx-auto block w-full">
+            <div className="p-4 sm:p-5 md:p-6 pb-20 md:pb-6 space-y-4 sm:space-y-5 max-w-5xl mx-auto block w-full">
               
               {/* ========================================================
                   1. BAŞLIQ VƏ QİYMƏT (YALNIZ MOBİLDƏ GÖSTƏRİLİR)
                  ======================================================== */}
-              <div className="border-b border-slate-200 pb-5 block w-full md:hidden">
+              <div className="border-b border-slate-200 pb-4 block w-full md:hidden">
                 {/* Qiymət */}
-                <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-none">
-                  {safePrice} <span className="text-2xl sm:text-3xl font-extrabold text-slate-900">₼</span>
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-none">
+                  {safePrice} <span className="text-xl sm:text-2xl font-extrabold text-slate-900">₼</span>
                 </div>
 
                 {/* Avtomobilin Tam Adı */}
-                <h1 className="text-xl sm:text-2xl font-bold text-black mt-2.5 leading-snug">
-                  <div className="text-xl sm:text-2xl font-bold text-black">
+                <h1 className="text-lg sm:text-xl font-bold text-black mt-2 leading-snug">
+                  <div className="text-lg sm:text-xl font-bold text-black">
                     {vehicleMainTitle}
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold text-black mt-1">
+                  <div className="text-base sm:text-lg font-bold text-black mt-0.5">
                     {safeMileage} km
                   </div>
                 </h1>
 
                 {/* Status teqləri */}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Gömrük olunub
                   </span>
@@ -1015,11 +1015,11 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
           </div>
 
-          {/* Sticky Bottom Action Bar (Zəng et + WhatsApp) - Yalnız Mobil Rejimdə (Floating Turbo.az Stili) */}
-          <div className="px-3 sm:px-4 pb-3 pt-1 sticky bottom-0 z-30 flex md:hidden items-center gap-2.5 shrink-0 pointer-events-none">
+          {/* Floating Bottom Action Bar (Zəng et + WhatsApp) - Yalnız Mobil Rejimdə (Floating Turbo.az Stili) */}
+          <div className="absolute bottom-0 left-0 right-0 z-30 px-3.5 sm:px-4 pb-3.5 pt-2 flex md:hidden items-center gap-2.5 pointer-events-none">
             <a
               href={`tel:${PHONE_NUMBER.replace(/\s+/g, '')}`}
-              className="px-4 sm:px-6 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-colors shrink-0 shadow-lg shadow-blue-700/30 active:scale-95 pointer-events-auto"
+              className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-700/30 active:scale-95 pointer-events-auto"
               title="Zəng et"
             >
               <Phone className="w-4 h-4" />
@@ -1036,7 +1036,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
               <img 
                 src={whatsappLogo} 
                 alt="WhatsApp" 
-                className="w-4 h-4 object-contain"
+                className="w-4 h-4 object-contain" 
                 referrerPolicy="no-referrer"
               />
               <span>WhatsApp ilə yaz</span>
