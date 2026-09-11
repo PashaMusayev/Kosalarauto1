@@ -234,6 +234,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [wheelDrive, setWheelDrive] = useState<string>('');
   const [baseLength, setBaseLength] = useState<string>('');
   const [roofHeight, setRoofHeight] = useState<string>('');
+  const [seatCount, setSeatCount] = useState<string>('');
   const [condition, setCondition] = useState('');
   const [description, setDescription] = useState('');
   const [isFeatured, setIsFeatured] = useState(false);
@@ -306,6 +307,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setWheelDrive('');
     setBaseLength('');
     setRoofHeight('');
+    setSeatCount('');
     setCondition('');
     setDescription('');
     setIsFeatured(false);
@@ -339,6 +341,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setWheelDrive(car.wheelDrive || '');
     setBaseLength(car.baseLength || '');
     setRoofHeight(car.roofHeight || '');
+    setSeatCount(car.seatCount || '');
     setCondition(car.condition || '');
     setDescription(car.description || '');
     setIsFeatured(!!car.isFeatured);
@@ -551,6 +554,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         wheelDrive: wheelDrive.trim(),
         baseLength,
         roofHeight,
+        ...(seatCount.trim() ? { seatCount: seatCount.trim() } : {}),
         condition: condition.trim(),
         vinCode: safeVin,
         primaryImage: currentPrimary,
@@ -569,6 +573,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           condition: condition.trim(),
           baseLength,
           roofHeight,
+          ...(seatCount.trim() ? { seatCount: seatCount.trim() } : {}),
           transmission: transmission.trim(),
           wheelDrive: wheelDrive.trim(),
           engine: engine.trim(),
@@ -790,6 +795,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           setBaseLength={setBaseLength}
           roofHeight={roofHeight}
           setRoofHeight={setRoofHeight}
+          seatCount={seatCount}
+          setSeatCount={setSeatCount}
           color={color}
           setColor={setColor}
           carStatus={carStatus}

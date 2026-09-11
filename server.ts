@@ -196,6 +196,12 @@ function validateAndSanitizeCars(cars: unknown[]): { valid: boolean; error?: str
     const wheelDrive = String(c.wheelDrive || c.driveType || c.drive_type || 'Ön çəkən (FWD)').slice(0, 100);
     const baseLength = String(c.baseLength || c.base_length || '3.30 m').slice(0, 100);
     const roofHeight = String(c.roofHeight || c.roof_height || 'Hündür dam').slice(0, 100);
+    const rawSeatCount = c.seatCount !== undefined && c.seatCount !== null 
+      ? c.seatCount 
+      : (c.seat_count !== undefined && c.seat_count !== null 
+          ? c.seat_count 
+          : (c.specs && typeof c.specs === 'object' ? ((c.specs as Record<string, unknown>).seatCount || (c.specs as Record<string, unknown>).seat_count) : undefined));
+    const seatCount = rawSeatCount ? String(rawSeatCount).trim().slice(0, 50) : undefined;
     const condition = String(c.condition || 'Vuruğu yoxdur, rənglənməyib').slice(0, 200);
     const vinCode = String(c.vinCode || c.vin_code || '').trim().toUpperCase().slice(0, 50);
     const description = String(c.description || '').slice(0, 5000);
@@ -276,6 +282,7 @@ function validateAndSanitizeCars(cars: unknown[]): { valid: boolean; error?: str
       wheelDrive,
       baseLength,
       roofHeight,
+      ...(seatCount ? { seatCount } : {}),
       condition,
       vinCode,
       primaryImage,
@@ -480,6 +487,7 @@ function formatSupabaseCarRow(row: Record<string, any>): Record<string, unknown>
     bodyType: String(row.body_type || row.bodyType || specs.bodyType || specs.body_type || 'Yük furqonu'),
     baseLength: String(row.base_length || row.baseLength || specs.baseLength || specs.base_length || '3.30 m'),
     roofHeight: String(row.roof_height || row.roofHeight || specs.roofHeight || specs.roof_height || 'Hündür dam'),
+    seatCount: row.seat_count ? String(row.seat_count) : (row.seatCount ? String(row.seatCount) : (specs.seatCount ? String(specs.seatCount) : (specs.seat_count ? String(specs.seat_count) : undefined))),
     color: String(row.color || specs.color || 'Ağ'),
     fuelType: String(row.fuel_type || row.fuelType || specs.fuelType || 'Dizel'),
     condition: condition,
@@ -527,6 +535,7 @@ function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string
     body_type: c.bodyType || 'Yük furqonu',
     base_length: c.baseLength || '3.30 m',
     roof_height: c.roofHeight || 'Hündür dam',
+    ...(c.seatCount ? { seat_count: String(c.seatCount), seatCount: String(c.seatCount) } : {}),
     color: c.color || 'Ağ',
     fuel_type: c.fuelType || 'Dizel',
     condition: condition,
@@ -547,6 +556,7 @@ function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string
       condition,
       baseLength: c.baseLength,
       roofHeight: c.roofHeight,
+      ...(c.seatCount ? { seatCount: c.seatCount } : {}),
       transmission: c.transmission,
       wheelDrive: c.wheelDrive,
       engine: c.engine,

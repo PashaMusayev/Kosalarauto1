@@ -60,6 +60,8 @@ interface CarFormModalProps {
   setBaseLength: (val: string) => void;
   roofHeight: string;
   setRoofHeight: (val: string) => void;
+  seatCount: string;
+  setSeatCount: (val: string) => void;
   color: string;
   setColor: (val: string) => void;
   carStatus: 'active' | 'sold';
@@ -136,6 +138,8 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
   setBaseLength,
   roofHeight,
   setRoofHeight,
+  seatCount,
+  setSeatCount,
   color,
   setColor,
   carStatus,
@@ -500,7 +504,7 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                   </div>
 
                   {/* Ötürücü (Drive Train) */}
-                  <div className="sm:col-span-2 md:col-span-2">
+                  <div className="sm:col-span-1 md:col-span-2">
                     <label className="font-bold text-slate-300 block mb-1">
                       Ötürücü (Drive Train):
                     </label>
@@ -512,6 +516,28 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                       <option value="">Seçin...</option>
                       <option value="Ön (qabaq)">Ön (qabaq)</option>
                       <option value="Arxa">Arxa</option>
+                    </select>
+                  </div>
+
+                  {/* Yerlərin sayı (Seat Count) */}
+                  <div className="sm:col-span-1 md:col-span-2">
+                    <label className="font-bold text-slate-300 block mb-1">
+                      Yerlərin sayı:
+                    </label>
+                    <select
+                      value={seatCount}
+                      onChange={(e) => setSeatCount(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-amber-500 focus:outline-none"
+                    >
+                      <option value="">Seçin...</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                      <option value="5">5</option>
+                      <option value="6">6</option>
+                      <option value="7">7</option>
+                      <option value="8">8</option>
+                      <option value="9+">9+</option>
                     </select>
                   </div>
                 </div>

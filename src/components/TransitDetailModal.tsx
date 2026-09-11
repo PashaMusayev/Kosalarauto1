@@ -377,6 +377,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   const safeLocation = car?.city || car?.location || 'Bakı';
   const safeCondition = car?.condition || 'Vuruğu yoxdur, rənglənməyib';
   const safeHp = car?.hp ? `${car.hp} a.g.` : '';
+  const safeSeatCount = car?.seatCount ? String(car.seatCount).trim() : '';
 
   // Subtitle format without horsepower
   const engineSubtitle = safeEngine.includes('L') ? safeEngine : `${safeEngine} L`;
@@ -665,41 +666,47 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
                     </div>
                   </div>
 
-                  {/* 3. Xüsusiyyətlər (Yığcam Cədvəl) */}
+                  {/* 3. Xüsusiyyətlər (Yığcam Cədvəl - Turbo.az Stili) */}
                   <div className="border-t border-slate-200 pt-3 space-y-2 text-xs lg:text-sm">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Şəhər</span>
                       <span className="font-semibold text-slate-900">{safeLocation}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Yürüş</span>
                       <span className="font-semibold text-slate-900">{safeMileage} km</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Buraxılış ili</span>
                       <span className="font-semibold text-slate-900">{safeYear || '-'}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Mühərrik</span>
                       <span className="font-semibold text-slate-900">{safeEngine} L{safeHp ? ` / ${safeHp}` : ''} / {safeFuelType}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Sürətlər qutusu</span>
                       <span className="font-semibold text-slate-900">{safeTransmission}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Ötürücü</span>
                       <span className="font-semibold text-slate-900">{safeWheelDrive}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Ban növü</span>
                       <span className="font-semibold text-slate-900">{safeBodyType}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    {safeSeatCount ? (
+                      <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+                        <span className="text-slate-500 font-normal">Yerlərin sayı</span>
+                        <span className="font-semibold text-slate-900">{safeSeatCount}</span>
+                      </div>
+                    ) : null}
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Baza uzunluğu</span>
                       <span className="font-semibold text-slate-900">{safeBaseLength}</span>
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Vəziyyəti</span>
                       <span className="font-semibold text-emerald-700">{safeCondition}</span>
                     </div>
@@ -774,61 +781,67 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
               </div>
 
               {/* ========================================================
-                  2. XÜSUSİYYƏTLƏR CƏDVƏLİ (YALNIZ MOBİLDƏ GÖSTƏRİLİR)
+                  2. XÜSUSİYYƏTLƏR CƏDVƏLİ (YALNIZ MOBİLDƏ GÖSTƏRİLİR - TURBO.AZ STİLİ)
                  ======================================================== */}
               <div className="border-b border-slate-200 pb-3 md:hidden">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-3 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2 text-sm">
                   {/* Sol Sütun */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Şəhər</span>
                       <span className="font-semibold text-slate-900">{safeLocation}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Marka</span>
                       <span className="font-semibold text-slate-900">{safeMake}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Model</span>
                       <span className="font-semibold text-slate-900">{safeModel}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Buraxılış ili</span>
                       <span className="font-semibold text-slate-900">{safeYear || '-'}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Ban növü</span>
                       <span className="font-semibold text-slate-900">{safeBodyType}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 md:border-b-0 md:pb-0">
+                    {safeSeatCount ? (
+                      <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+                        <span className="text-slate-500 font-normal">Yerlərin sayı</span>
+                        <span className="font-semibold text-slate-900">{safeSeatCount}</span>
+                      </div>
+                    ) : null}
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Rəng</span>
                       <span className="font-semibold text-slate-900">{safeColor}</span>
                     </div>
                   </div>
 
                   {/* Sağ Sütun */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Mühərrik</span>
                       <span className="font-semibold text-slate-900">{safeEngine} L{safeHp ? ` / ${safeHp}` : ''} / {safeFuelType}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Yürüş</span>
                       <span className="font-semibold text-slate-900">{safeMileage} km</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Sürətlər qutusu</span>
                       <span className="font-semibold text-slate-900">{safeTransmission}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Ötürücü</span>
                       <span className="font-semibold text-slate-900">{safeWheelDrive}</span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Baza uzunluğu</span>
                       <span className="font-semibold text-slate-900">{safeBaseLength}</span>
                     </div>
-                    <div className="flex items-center justify-between pb-0">
+                    <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
                       <span className="text-slate-500 font-normal">Vəziyyəti</span>
                       <span className="font-semibold text-emerald-700">{safeCondition}</span>
                     </div>
@@ -1002,11 +1015,11 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
           </div>
 
-          {/* Sticky Bottom Action Bar (Zəng et + WhatsApp) - Yalnız Mobil Rejimdə */}
-          <div className="bg-white border-t border-slate-200 px-3 sm:px-4 py-2.5 sm:py-3 sticky bottom-0 z-30 flex md:hidden items-center gap-2.5 shadow-lg shrink-0">
+          {/* Sticky Bottom Action Bar (Zəng et + WhatsApp) - Yalnız Mobil Rejimdə (Floating Turbo.az Stili) */}
+          <div className="px-3 sm:px-4 pb-3 pt-1 sticky bottom-0 z-30 flex md:hidden items-center gap-2.5 shrink-0 pointer-events-none">
             <a
               href={`tel:${PHONE_NUMBER.replace(/\s+/g, '')}`}
-              className="px-4 sm:px-6 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-colors shrink-0 shadow-sm shadow-blue-600/20 active:scale-95"
+              className="px-4 sm:px-6 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-colors shrink-0 shadow-lg shadow-blue-700/30 active:scale-95 pointer-events-auto"
               title="Zəng et"
             >
               <Phone className="w-4 h-4" />
@@ -1018,7 +1031,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => trackWhatsAppClick()}
-              className="flex-1 bg-[#25D366] hover:bg-[#20bd5a] active:bg-[#1da851] text-white font-bold text-xs sm:text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm active:scale-98"
+              className="flex-1 bg-[#25D366] hover:bg-[#20bd5a] active:bg-[#1da851] text-white font-bold text-xs sm:text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-700/30 active:scale-98 pointer-events-auto"
             >
               <img 
                 src={whatsappLogo} 
