@@ -81,6 +81,7 @@ export function mapSupabaseRowToCar(row: Record<string, unknown>): TransitCar {
     price: Number(row.price || specs.price) || 0,
     baseLength: String(row.base_length || row.baseLength || specs.baseLength || specs.base_length || '3.30 m'),
     roofHeight: String(row.roof_height || row.roofHeight || specs.roofHeight || specs.roof_height || 'Hündür dam'),
+    seatCount: row.seat_count ? String(row.seat_count) : (row.seatCount ? String(row.seatCount) : (specs.seatCount ? String(specs.seatCount) : (specs.seat_count ? String(specs.seat_count) : undefined))),
     wheelDrive: String(row.drive_type || row.wheelDrive || row.driveTrain || specs.wheelDrive || specs.drive_type || 'Ön çəkən (FWD)'),
     color: String(row.color || specs.color || 'Ağ'),
     fuelType: String(row.fuel_type || row.fuelType || specs.fuelType || 'Dizel'),
@@ -124,6 +125,7 @@ export function mapCarToSupabaseRow(car: TransitCar): Record<string, unknown> {
     body_type: car.bodyType || 'Yük furqonu',
     base_length: car.baseLength || '3.30 m',
     roof_height: car.roofHeight || 'Hündür dam',
+    ...(car.seatCount ? { seat_count: String(car.seatCount) } : {}),
     color: car.color || 'Ağ',
     fuel_type: car.fuelType || 'Dizel',
     condition: condition,
@@ -155,6 +157,7 @@ export function mapCarToSupabaseRow(car: TransitCar): Record<string, unknown> {
       mileage: car.mileage,
       price: car.price,
       vinCode: car.vinCode,
+      ...(car.seatCount ? { seatCount: car.seatCount } : {}),
       ...(car.specs || {})
     },
     updated_at: new Date().toISOString()
@@ -252,11 +255,16 @@ export async function upsertCarToSupabase(car: TransitCar): Promise<{ success: b
       },
       body: JSON.stringify({ car })
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      return { success: false, error: data?.error || 'Məlumat serverə yazıla bilmədi' };
+    let data: Record<string, unknown> | null = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
     }
-    return { success: true, cars: data.cars };
+    if (!res.ok || !data || !data.success) {
+      return { success: false, error: (typeof data?.error === 'string' ? data.error : null) || `Məlumat serverə yazıla bilmədi (${res.status})` };
+    }
+    return { success: true, cars: data.cars as TransitCar[] | undefined };
   } catch (err: unknown) {
     console.error('Car upsert exception:', err);
     const msg = err instanceof Error ? err.message : 'Məlumat yadda saxlanılmadı';
@@ -286,12 +294,17 @@ export async function deleteCarFromSupabase(
       method: 'DELETE',
       headers: getAdminAuthHeaders()
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      return { success: false, error: data?.error || 'Avtomobil silinmədi' };
+    let data: Record<string, unknown> | null = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    if (!res.ok || !data || !data.success) {
+      return { success: false, error: (typeof data?.error === 'string' ? data.error : null) || `Avtomobil silinmədi (${res.status})` };
     }
 
-    return { success: true, storageDeleted: 1, cars: data.cars };
+    return { success: true, storageDeleted: 1, cars: data.cars as TransitCar[] | undefined };
   } catch (err: unknown) {
     console.error('Car delete exception:', err);
     const msg = err instanceof Error ? err.message : 'Serverlə əlaqə xətası';
@@ -315,11 +328,16 @@ export async function updateCarStatusInSupabase(
       },
       body: JSON.stringify({ status })
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      return { success: false, error: data?.error || 'Status yenilənmədi' };
+    let data: Record<string, unknown> | null = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
     }
-    return { success: true, cars: data.cars };
+    if (!res.ok || !data || !data.success) {
+      return { success: false, error: (typeof data?.error === 'string' ? data.error : null) || `Status yenilənmədi (${res.status})` };
+    }
+    return { success: true, cars: data.cars as TransitCar[] | undefined };
   } catch (err: unknown) {
     console.error('Status update exception:', err);
     const msg = err instanceof Error ? err.message : 'Serverlə əlaqə xətası';

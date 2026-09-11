@@ -25,8 +25,9 @@ export const SUPABASE_RLS_SQL = `-- ============================================
 -- Bu SQL skriptini Supabase SQL Redaktorunda (SQL Editor) icra edin.
 -- ========================================================
 
--- 1. 'cars' CƏDVƏLİNDƏ RLS AKTİVLƏŞDİRİLMƏSİ
+-- 1. 'cars' CƏDVƏLİNDƏ RLS AKTİVLƏŞDİRİLMƏSİ VƏ SÜTUN YOXLANILMASI
 ALTER TABLE IF EXISTS cars ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS cars ADD COLUMN IF NOT EXISTS seat_count text;
 
 -- 2. Hər kəs üçün maşınları oxumaq (SELECT) icazəsi
 DROP POLICY IF EXISTS "Public Read Cars" ON cars;

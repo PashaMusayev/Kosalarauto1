@@ -530,6 +530,7 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-amber-500 focus:outline-none"
                     >
                       <option value="">Seçin...</option>
+                      <option value="1">1</option>
                       <option value="2">2</option>
                       <option value="3">3</option>
                       <option value="4">4</option>

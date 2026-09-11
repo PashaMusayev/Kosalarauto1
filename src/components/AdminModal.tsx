@@ -176,7 +176,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     try {
       const res = await updateCarStatusInSupabase(car.id, nextStatus);
       if (!res.success) {
-        alert(`Status Xətası:\n\n${res.error}`);
+        const errorMsg = res.error || 'Status yenilənmədi';
+        showToast(`Xəta: ${errorMsg}`);
+        alert(`Status Xətası:\n\n${errorMsg}`);
         return;
       }
 
@@ -627,6 +629,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       console.error('Save failed:', err);
       const msg = err instanceof Error ? err.message : 'Bilinməyən xəta baş verdi';
       setSaveError(msg);
+      showToast(`Xəta: ${msg}`);
       alert(`KRİTİK SUPABASE XƏTASI:\n\n${msg}\n\nMəlumat bazaya yazılmadı. Zəhmət olmasa xətanı yoxlayın.`);
     } finally {
       setIsSaving(false);
@@ -658,6 +661,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     } catch (err: unknown) {
       console.error("Silmə xətası:", err);
       const msg = err instanceof Error ? err.message : 'Bilinməyən xəta';
+      showToast(`Xəta: ${msg}`);
       alert("Xəta baş verdi: " + msg);
     } finally {
       setDeletingCarId(null);

@@ -535,7 +535,7 @@ function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string
     body_type: c.bodyType || 'Yük furqonu',
     base_length: c.baseLength || '3.30 m',
     roof_height: c.roofHeight || 'Hündür dam',
-    ...(c.seatCount ? { seat_count: String(c.seatCount), seatCount: String(c.seatCount) } : {}),
+    ...(c.seatCount ? { seat_count: String(c.seatCount) } : {}),
     color: c.color || 'Ağ',
     fuel_type: c.fuelType || 'Dizel',
     condition: condition,
@@ -547,7 +547,10 @@ function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string
     badges: Array.isArray(c.statusBadges || c.badges) ? (c.statusBadges || c.badges) : ['Vuruqsuz', 'Gömrük olunub', 'Zəmanətli'],
     is_featured: Boolean(c.isFeatured),
     status: c.status === 'sold' ? 'sold' : 'active',
-    specs: (typeof c.specs === 'object' && c.specs !== null) ? c.specs : {
+    specs: (typeof c.specs === 'object' && c.specs !== null) ? {
+      ...(c.specs as Record<string, unknown>),
+      ...(c.seatCount ? { seatCount: String(c.seatCount) } : {})
+    } : {
       brand,
       make: brand,
       model,
@@ -732,40 +735,45 @@ async function startServer() {
       const nextStatus: 'active' | 'sold' = req.body.status === 'sold' ? 'sold' : 'active';
 
       const supabase = getServerSupabase();
-      if (supabase) {
-        try {
-          const { error: sbErr } = await supabase
-            .from('cars')
-            .update({
-              status: nextStatus,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', cleanCarId);
-
-          if (!sbErr) {
-            const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
-            res.json({ success: true, carId: cleanCarId, status: nextStatus, cars: authoritativeCars });
-            return;
-          }
-          console.warn('Supabase status update error in POST /api/cars:', sbErr.message);
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : 'Supabase status error';
-          console.warn('Supabase status update exception in POST /api/cars:', msg);
-        }
+      if (!supabase) {
+        console.error('Supabase client unavailable during status update in POST /api/cars');
+        res.status(502).json({
+          success: false,
+          error: 'Məlumat bazasına qoşulmaq mümkün olmadı. Supabase konfiqurasiyasını yoxlayın və ya administratorla əlaqə saxlayın.'
+        });
+        return;
       }
 
-      // Disk-only degraded fallback with serialized mutex
-      const updatedCars = await withWriteLock(async () => {
-        const currentCars = getCarsFromDisk();
-        const nextCars = currentCars.map((c: Record<string, unknown>) => 
-          String(c.id) === String(cleanCarId) ? { ...c, status: nextStatus } : c
-        );
-        saveCarsToDisk(nextCars);
-        return nextCars;
-      });
+      try {
+        const { error: sbErr } = await supabase
+          .from('cars')
+          .update({
+            status: nextStatus,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', cleanCarId);
 
-      res.json({ success: true, carId: cleanCarId, status: nextStatus, cars: updatedCars, source: 'local' });
-      return;
+        if (sbErr) {
+          console.error('Supabase status update error in POST /api/cars:', sbErr.message, sbErr);
+          res.status(502).json({
+            success: false,
+            error: `Məlumat bazasına yazıla bilmədi: ${sbErr.message}. Zəhmət olmasa bir azdan yenidən cəhd edin və ya administratorla əlaqə saxlayın.`
+          });
+          return;
+        }
+
+        const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+        res.json({ success: true, carId: cleanCarId, status: nextStatus, cars: authoritativeCars });
+        return;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Supabase status error';
+        console.error('Supabase status update exception in POST /api/cars:', msg, err);
+        res.status(502).json({
+          success: false,
+          error: `Məlumat bazasında gözlənilməz xəta: ${msg}. Zəhmət olmasa bir azdan yenidən cəhd edin.`
+        });
+        return;
+      }
     }
 
     // Case 2: Single car object { car: { ... } } OR single car array { cars: [ { ... } ] }
@@ -774,83 +782,119 @@ async function startServer() {
     if (rawSingleCar && typeof rawSingleCar === 'object') {
       const validation = validateAndSanitizeCars([rawSingleCar]);
       if (!validation.valid || !validation.sanitized || validation.sanitized.length === 0) {
-        res.status(400).json({ error: validation.error || 'Daxil edilən elan məlumatları düzgün formatda deyil' });
+        res.status(400).json({ success: false, error: validation.error || 'Daxil edilən elan məlumatları düzgün formatda deyil' });
         return;
       }
 
       const sanitizedCar = validation.sanitized[0];
       const supabase = getServerSupabase();
 
-      if (supabase) {
-        try {
-          const row = mapSanitizedCarToSupabaseRow(sanitizedCar);
-          // Atomic single-row upsert touching ONLY this car's row
-          const { error: sbErr } = await supabase.from('cars').upsert(row, { onConflict: 'id' });
-          if (!sbErr) {
-            // Re-fetch authoritative list FROM SUPABASE to refresh disk cache
-            const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
-            res.json({ success: true, car: sanitizedCar, cars: authoritativeCars });
-            return;
-          }
-          console.warn('Supabase single-car upsert error:', sbErr.message);
-        } catch (sbErr: unknown) {
-          const msg = sbErr instanceof Error ? sbErr.message : 'Supabase upsert error';
-          console.warn('Failed to upsert single car to Supabase:', msg);
-        }
+      if (!supabase) {
+        console.error('Supabase client unavailable during single-car upsert in POST /api/cars');
+        res.status(502).json({
+          success: false,
+          error: 'Məlumat bazasına qoşulmaq mümkün olmadı. Supabase konfiqurasiyasını yoxlayın və ya administratorla əlaqə saxlayın.'
+        });
+        return;
       }
 
-      // Disk-only degraded fallback with serialized mutex
-      const updatedCars = await withWriteLock(async () => {
-        const currentCars = getCarsFromDisk();
-        const existingIdx = currentCars.findIndex((c: Record<string, unknown>) => String(c.id) === String(sanitizedCar.id));
-        let nextCars: Record<string, unknown>[];
-        if (existingIdx >= 0) {
-          nextCars = currentCars.map((c: Record<string, unknown>, i: number) => i === existingIdx ? sanitizedCar : c);
-        } else {
-          nextCars = [sanitizedCar, ...currentCars];
-        }
-        saveCarsToDisk(nextCars);
-        return nextCars;
-      });
+      try {
+        const row = mapSanitizedCarToSupabaseRow(sanitizedCar);
+        // Atomic single-row upsert touching ONLY this car's row
+        let { error: sbErr } = await supabase.from('cars').upsert(row, { onConflict: 'id' });
 
-      res.json({ success: true, car: sanitizedCar, cars: updatedCars, source: 'local' });
-      return;
+        // Resilience: If Supabase table does not yet have 'seat_count' column in schema cache,
+        // retry without top-level seat_count (seatCount is already safely preserved in specs JSONB).
+        if (sbErr && sbErr.message && (sbErr.message.includes('seat_count') || sbErr.message.includes('seatCount'))) {
+          console.warn("Supabase cars table lacks 'seat_count' column; retrying without top-level column (preserved in specs):", sbErr.message);
+          const rowWithoutSeat = { ...row };
+          delete rowWithoutSeat.seat_count;
+          delete (rowWithoutSeat as Record<string, unknown>).seatCount;
+          const retryRes = await supabase.from('cars').upsert(rowWithoutSeat, { onConflict: 'id' });
+          sbErr = retryRes.error;
+        }
+
+        if (sbErr) {
+          console.error('Supabase single-car upsert error:', sbErr.message, sbErr);
+          res.status(502).json({
+            success: false,
+            error: `Məlumat bazasına yazıla bilmədi: ${sbErr.message}. Zəhmət olmasa bir azdan yenidən cəhd edin və ya administratorla əlaqə saxlayın.`
+          });
+          return;
+        }
+
+        // Re-fetch authoritative list FROM SUPABASE to refresh disk cache
+        const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+        res.json({ success: true, car: sanitizedCar, cars: authoritativeCars });
+        return;
+      } catch (sbErr: unknown) {
+        const msg = sbErr instanceof Error ? sbErr.message : 'Supabase upsert error';
+        console.error('Failed to upsert single car to Supabase:', msg, sbErr);
+        res.status(502).json({
+          success: false,
+          error: `Məlumat bazasında gözlənilməz xəta: ${msg}. Zəhmət olmasa bir azdan yenidən cəhd edin.`
+        });
+        return;
+      }
     }
 
     // Case 3: Batch array of multiple cars (legacy / initial sync support)
     const { cars } = req.body;
     const validation = validateAndSanitizeCars(cars);
     if (!validation.valid || !validation.sanitized) {
-      res.status(400).json({ error: validation.error || 'Daxil edilən elan məlumatları düzgün formatda deyil' });
+      res.status(400).json({ success: false, error: validation.error || 'Daxil edilən elan məlumatları düzgün formatda deyil' });
       return;
     }
 
     const sanitizedCars = validation.sanitized;
     const supabase = getServerSupabase();
 
-    if (supabase) {
-      try {
-        const rows = sanitizedCars.map(mapSanitizedCarToSupabaseRow);
-        const { error } = await supabase.from('cars').upsert(rows, { onConflict: 'id' });
-        if (!error) {
-          const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
-          res.json({ success: true, cars: authoritativeCars });
-          return;
-        }
-        console.warn('Supabase batch upsert warning:', error.message);
-      } catch (sbErr: unknown) {
-        const msg = sbErr instanceof Error ? sbErr.message : 'Batch upsert error';
-        console.warn('Failed to sync cars batch to Supabase:', msg);
-      }
+    if (!supabase) {
+      console.error('Supabase client unavailable during batch sync in POST /api/cars');
+      res.status(502).json({
+        success: false,
+        error: 'Məlumat bazasına qoşulmaq mümkün olmadı. Supabase konfiqurasiyasını yoxlayın və ya administratorla əlaqə saxlayın.'
+      });
+      return;
     }
 
-    // Disk fallback with serialized mutex
-    const updatedCars = await withWriteLock(async () => {
-      saveCarsToDisk(sanitizedCars);
-      return sanitizedCars;
-    });
+    try {
+      const rows = sanitizedCars.map(mapSanitizedCarToSupabaseRow);
+      let { error: sbErr } = await supabase.from('cars').upsert(rows, { onConflict: 'id' });
 
-    res.json({ success: true, cars: updatedCars, source: 'local' });
+      if (sbErr && sbErr.message && (sbErr.message.includes('seat_count') || sbErr.message.includes('seatCount'))) {
+        console.warn("Supabase batch upsert: cars table lacks 'seat_count' column; retrying batch without top-level column (preserved in specs):", sbErr.message);
+        const rowsWithoutSeat = rows.map(r => {
+          const copy = { ...r };
+          delete copy.seat_count;
+          delete (copy as Record<string, unknown>).seatCount;
+          return copy;
+        });
+        const retryRes = await supabase.from('cars').upsert(rowsWithoutSeat, { onConflict: 'id' });
+        sbErr = retryRes.error;
+      }
+
+      if (sbErr) {
+        console.error('Supabase batch upsert error:', sbErr.message, sbErr);
+        res.status(502).json({
+          success: false,
+          error: `Məlumat bazasına yazıla bilmədi: ${sbErr.message}. Zəhmət olmasa bir azdan yenidən cəhd edin və ya administratorla əlaqə saxlayın.`
+        });
+        return;
+      }
+
+      const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+      res.json({ success: true, cars: authoritativeCars });
+      return;
+    } catch (sbErr: unknown) {
+      const msg = sbErr instanceof Error ? sbErr.message : 'Batch upsert error';
+      console.error('Failed to sync cars batch to Supabase:', msg, sbErr);
+      res.status(502).json({
+        success: false,
+        error: `Məlumat bazasında gözlənilməz xəta: ${msg}. Zəhmət olmasa bir azdan yenidən cəhd edin.`
+      });
+      return;
+    }
   });
 
   // Protected: Atomic Status Toggle Endpoint (PATCH /api/cars/:id/status)
@@ -858,7 +902,7 @@ async function startServer() {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const rawId = req.params.id;
     if (!rawId) {
-      res.status(400).json({ error: 'Avtomobil ID tələb olunur' });
+      res.status(400).json({ success: false, error: 'Avtomobil ID tələb olunur' });
       return;
     }
 
@@ -866,40 +910,46 @@ async function startServer() {
     const nextStatus: 'active' | 'sold' = req.body.status === 'sold' ? 'sold' : 'active';
 
     const supabase = getServerSupabase();
-    if (supabase) {
-      try {
-        // Atomic single-row update touching ONLY this car's status
-        const { error: sbErr } = await supabase
-          .from('cars')
-          .update({
-            status: nextStatus,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', carId);
-
-        if (!sbErr) {
-          const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
-          res.json({ success: true, carId, status: nextStatus, cars: authoritativeCars });
-          return;
-        }
-        console.warn('Supabase status update error in PATCH /api/cars/:id/status:', sbErr.message);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Supabase status error';
-        console.warn('Supabase status update exception:', msg);
-      }
+    if (!supabase) {
+      console.error('Supabase client unavailable during status update in PATCH /api/cars/:id/status');
+      res.status(502).json({
+        success: false,
+        error: 'Məlumat bazasına qoşulmaq mümkün olmadı. Supabase konfiqurasiyasını yoxlayın və ya administratorla əlaqə saxlayın.'
+      });
+      return;
     }
 
-    // Disk fallback with serialized mutex
-    const updatedCars = await withWriteLock(async () => {
-      const currentCars = getCarsFromDisk();
-      const nextCars = currentCars.map((c: Record<string, unknown>) => 
-        String(c.id) === String(carId) ? { ...c, status: nextStatus } : c
-      );
-      saveCarsToDisk(nextCars);
-      return nextCars;
-    });
+    try {
+      // Atomic single-row update touching ONLY this car's status
+      const { error: sbErr } = await supabase
+        .from('cars')
+        .update({
+          status: nextStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', carId);
 
-    res.json({ success: true, carId, status: nextStatus, cars: updatedCars, source: 'local' });
+      if (sbErr) {
+        console.error('Supabase status update error in PATCH /api/cars/:id/status:', sbErr.message, sbErr);
+        res.status(502).json({
+          success: false,
+          error: `Məlumat bazasına yazıla bilmədi: ${sbErr.message}. Zəhmət olmasa bir azdan yenidən cəhd edin və ya administratorla əlaqə saxlayın.`
+        });
+        return;
+      }
+
+      const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+      res.json({ success: true, carId, status: nextStatus, cars: authoritativeCars });
+      return;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Supabase status error';
+      console.error('Supabase status update exception in PATCH /api/cars/:id/status:', msg, err);
+      res.status(502).json({
+        success: false,
+        error: `Məlumat bazasında gözlənilməz xəta: ${msg}. Zəhmət olmasa bir azdan yenidən cəhd edin.`
+      });
+      return;
+    }
   });
 
   // Protected: Delete car endpoint with Supabase Storage and DB cleanup
@@ -907,75 +957,73 @@ async function startServer() {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const rawId = req.params.id;
     if (!rawId) {
-      res.status(400).json({ error: 'Avtomobil ID tələb olunur' });
+      res.status(400).json({ success: false, error: 'Avtomobil ID tələb olunur' });
       return;
     }
 
     const carId = String(rawId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
 
+    const supabase = getServerSupabase();
+    if (!supabase) {
+      console.error('Supabase client unavailable during delete in DELETE /api/cars/:id');
+      res.status(502).json({
+        success: false,
+        error: 'Məlumat bazasına qoşulmaq mümkün olmadı. Supabase konfiqurasiyasını yoxlayın və ya administratorla əlaqə saxlayın.'
+      });
+      return;
+    }
+
     try {
-      const supabase = getServerSupabase();
-      if (supabase) {
-        try {
-          // Get car images first for storage cleanup
-          const { data: dbCar } = await supabase
-            .from('cars')
-            .select('primary_image, images')
-            .eq('id', carId)
-            .maybeSingle();
+      // Get car images first for storage cleanup
+      const { data: dbCar } = await supabase
+        .from('cars')
+        .select('primary_image, images')
+        .eq('id', carId)
+        .maybeSingle();
 
-          if (dbCar) {
-            const allImages: string[] = [];
-            if (dbCar.primary_image) allImages.push(dbCar.primary_image);
-            if (Array.isArray(dbCar.images)) allImages.push(...dbCar.images);
+      if (dbCar) {
+        const allImages: string[] = [];
+        if (dbCar.primary_image) allImages.push(dbCar.primary_image);
+        if (Array.isArray(dbCar.images)) allImages.push(...dbCar.images);
 
-            const paths: string[] = [];
-            for (const imgUrl of allImages) {
-              if (!imgUrl || typeof imgUrl !== 'string') continue;
-              const match = imgUrl.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/[^/?#]+\/(.+)$/i);
-              if (match && match[1]) {
-                const p = decodeURIComponent(match[1]);
-                paths.push(p);
-                if (p.startsWith('cars/')) paths.push(p.replace(/^cars\//, ''));
-                else paths.push(`cars/${p}`);
-              }
-            }
-
-            if (paths.length > 0) {
-              await supabase.storage.from('CAR-IMAGES').remove(paths).catch(() => {});
-              await supabase.storage.from('car-images').remove(paths).catch(() => {});
-              await supabase.storage.from('cars').remove(paths).catch(() => {});
-              await supabase.storage.from(STORAGE_BUCKET_NAME).remove(paths).catch(() => {});
-            }
+        const paths: string[] = [];
+        for (const imgUrl of allImages) {
+          if (!imgUrl || typeof imgUrl !== 'string') continue;
+          const match = imgUrl.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/[^/?#]+\/(.+)$/i);
+          if (match && match[1]) {
+            const p = decodeURIComponent(match[1]);
+            paths.push(p);
+            if (p.startsWith('cars/')) paths.push(p.replace(/^cars\//, ''));
+            else paths.push(`cars/${p}`);
           }
+        }
 
-          // Atomic delete of targeted DB row
-          const { error: sbErr } = await supabase.from('cars').delete().eq('id', carId);
-          if (!sbErr) {
-            // Re-fetch authoritative list from Supabase and refresh disk cache
-            const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
-            res.json({ success: true, message: 'Avtomobil uğurla silindi', cars: authoritativeCars });
-            return;
-          }
-          console.warn('Server Supabase car delete sync warning:', sbErr.message);
-        } catch (sbErr: unknown) {
-          const msg = sbErr instanceof Error ? sbErr.message : 'Supabase delete error';
-          console.warn('Server Supabase car delete sync exception:', msg);
+        if (paths.length > 0) {
+          await supabase.storage.from('CAR-IMAGES').remove(paths).catch(() => {});
+          await supabase.storage.from('car-images').remove(paths).catch(() => {});
+          await supabase.storage.from('cars').remove(paths).catch(() => {});
+          await supabase.storage.from(STORAGE_BUCKET_NAME).remove(paths).catch(() => {});
         }
       }
 
-      // Disk fallback with serialized mutex
-      const updatedCars = await withWriteLock(async () => {
-        const currentCars = getCarsFromDisk();
-        const nextCars = currentCars.filter((c: Record<string, unknown>) => String(c.id) !== String(carId));
-        saveCarsToDisk(nextCars);
-        return nextCars;
-      });
+      // Atomic delete of targeted DB row
+      const { error: sbErr } = await supabase.from('cars').delete().eq('id', carId);
+      if (sbErr) {
+        console.error('Server Supabase car delete sync error:', sbErr.message, sbErr);
+        res.status(502).json({
+          success: false,
+          error: `Məlumat bazasından silinmə uğursuz oldu: ${sbErr.message}. Zəhmət olmasa yenidən cəhd edin.`
+        });
+        return;
+      }
 
-      res.json({ success: true, message: 'Avtomobil uğurla silindi', cars: updatedCars, source: 'local' });
+      // Re-fetch authoritative list from Supabase and refresh disk cache
+      const authoritativeCars = await refreshDiskCacheFromSupabase(supabase);
+      res.json({ success: true, message: 'Avtomobil uğurla silindi', cars: authoritativeCars });
     } catch (err: unknown) {
       console.error('Server car delete error:', err);
-      res.status(500).json({ error: 'Silinmə zamanı xəta baş verdi' });
+      const msg = err instanceof Error ? err.message : 'Silinmə zamanı xəta baş verdi';
+      res.status(502).json({ success: false, error: `Silinmə zamanı xəta baş verdi: ${msg}` });
     }
   });
 
