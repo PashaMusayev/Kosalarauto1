@@ -5,6 +5,7 @@ import { FilterBar } from './components/FilterBar';
 import { TransitCard } from './components/TransitCard';
 import { TransitCardSkeleton } from './components/TransitCardSkeleton';
 import { TransitDetailModal } from './components/TransitDetailModal';
+import { Pagination } from './components/Pagination';
 import { AboutUs } from './components/AboutUs';
 import { FavoritesDrawer } from './components/FavoritesDrawer';
 import { ContactFooter } from './components/ContactFooter';
@@ -46,6 +47,8 @@ const DEFAULT_FILTERS: FilterState = {
   sortBy: 'featured'
 };
 
+const CARS_PER_PAGE = 12;
+
 const normalizePath = (p: string) => {
   try {
     const clean = p.toLowerCase().trim();
@@ -67,6 +70,7 @@ export default function App() {
   const [transits, setTransits] = useState<TransitCar[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('kosalar_favorites');
@@ -482,6 +486,29 @@ export default function App() {
     });
   }, [transits, filters]);
 
+  // Reset pagination to page 1 whenever filters or sort criteria change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
+  // Pagination calculations for the public catalog grid
+  const totalPages = Math.ceil(filteredTransits.length / CARS_PER_PAGE);
+
+  // If current page is beyond totalPages (e.g. after a filter or car deletion), clamp to last valid page
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  const safeCurrentPage = totalPages > 0 ? Math.min(Math.max(1, currentPage), totalPages) : 1;
+
+  // Paginated slice of cars to display on the current page
+  const paginatedTransits = useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * CARS_PER_PAGE;
+    return filteredTransits.slice(startIndex, startIndex + CARS_PER_PAGE);
+  }, [filteredTransits, safeCurrentPage]);
+
   // Favorites toggle
   const handleToggleFavorite = useCallback((carId: string) => {
     setFavorites(prev => 
@@ -513,6 +540,12 @@ export default function App() {
     }
   }, []);
 
+  // Handle page change and smoothly scroll back to top of catalog listings
+  const handlePageChange = useCallback((newPage: number) => {
+    setCurrentPage(newPage);
+    scrollToSection('movcud-avtomobiller');
+  }, [scrollToSection]);
+
   const handleOpenFavorites = useCallback(() => {
     setFavoritesOpen(true);
   }, []);
@@ -523,6 +556,7 @@ export default function App() {
 
   const handleResetFilters = useCallback(() => {
     setFilters(DEFAULT_FILTERS);
+    setCurrentPage(1);
   }, []);
 
   if (is404) {
@@ -571,9 +605,16 @@ export default function App() {
                   </h2>
                 </div>
 
-                <span className="text-xs font-bold text-[#0F172A] bg-white px-3.5 py-1.5 rounded-xl border border-slate-200/50 shadow-xs self-start sm:self-auto">
-                  {isLoading ? 'Yüklənir...' : `Ümumi: ${filteredTransits.length} model`}
-                </span>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <span className="text-xs font-bold text-[#0F172A] bg-white px-3.5 py-1.5 rounded-xl border border-slate-200/50 shadow-xs">
+                    {isLoading ? 'Yüklənir...' : `Ümumi: ${filteredTransits.length} model`}
+                  </span>
+                  {!isLoading && totalPages > 1 && (
+                    <span className="text-xs font-bold text-[#1D4ED8] bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200/60 shadow-xs">
+                      Səhifə {safeCurrentPage} / {totalPages}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {isLoading ? (
@@ -599,18 +640,27 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5 lg:gap-4">
-                  {filteredTransits.map((car, idx) => (
-                    <TransitCard
-                      key={car.id}
-                      car={car}
-                      onViewDetails={handleOpenDetail}
-                      isFavorite={favorites.includes(car.id)}
-                      onToggleFavorite={handleToggleFavorite}
-                      priority={idx < 4}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5 lg:gap-4">
+                    {paginatedTransits.map((car, idx) => (
+                      <TransitCard
+                        key={car.id}
+                        car={car}
+                        onViewDetails={handleOpenDetail}
+                        isFavorite={favorites.includes(car.id)}
+                        onToggleFavorite={handleToggleFavorite}
+                        priority={idx < 4}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Turbo.az Style Pagination Controls */}
+                  <Pagination
+                    currentPage={safeCurrentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                  />
+                </>
               )}
             </div>
 
