@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { FilterBar } from './components/FilterBar';
@@ -99,6 +99,17 @@ export default function App() {
     return false;
   });
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+
+  // References to keep latest path and cars available in event listeners without re-binding
+  const currentPathRef = useRef(currentPath);
+  useEffect(() => {
+    currentPathRef.current = currentPath;
+  }, [currentPath]);
+
+  const transitsRef = useRef(transits);
+  useEffect(() => {
+    transitsRef.current = transits;
+  }, [transits]);
 
   // Determine if the current route is 404 (Not Found)
   // Valid routes: '/' (home/catalog), '/admin444', '/haqqimizda', '/elaqe'
@@ -237,13 +248,33 @@ export default function App() {
 
     const handlePopState = () => {
       const p = normalizePath(window.location.pathname);
+      const pathChanged = p !== currentPathRef.current;
       setCurrentPath(p);
+      currentPathRef.current = p;
       if (p === '/admin444') {
         setAdminOpen(true);
       } else {
         setAdminOpen(false);
       }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Read the car query param from the URL on every popstate event
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const carId = params.get('car');
+        if (carId) {
+          const list = transitsRef.current.length > 0 ? transitsRef.current : transits;
+          const matchedCar = list.find(c => c.id.toLowerCase() === carId.toLowerCase());
+          setSelectedCar(matchedCar || null);
+        } else {
+          setSelectedCar(null);
+        }
+      } catch (e) {
+        setSelectedCar(null);
+      }
+
+      if (pathChanged) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     };
 
     const handleHashChange = () => {
@@ -315,17 +346,25 @@ export default function App() {
     try {
       const url = new URL(window.location.href);
       url.searchParams.set('car', car.id);
-      window.history.replaceState({}, '', url.toString());
+      window.history.pushState({ carModal: true }, '', url.toString());
     } catch (e) {}
   }, []);
 
   const handleCloseDetail = useCallback(() => {
-    setSelectedCar(null);
     try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('car');
-      window.history.replaceState({}, '', url.toString());
-    } catch (e) {}
+      // Pop the history entry pushed when detail was opened, which dispatches popstate
+      if (window.history.state?.carModal || window.history.length > 1) {
+        window.history.back();
+      } else {
+        // Fallback for direct link in a fresh tab with no prior history
+        setSelectedCar(null);
+        const url = new URL(window.location.href);
+        url.searchParams.delete('car');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch (e) {
+      window.history.back();
+    }
   }, []);
 
   // Filter & Sort Logic (Only active cars displayed on the public visitor catalog)
