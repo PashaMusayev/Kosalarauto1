@@ -411,7 +411,207 @@ const TurboYearSelect = React.memo<TurboYearSelectProps>(({
 });
 
 // ----------------------------------------------------------------------
-// 3. MAIN FILTER BAR COMPONENT
+// 3. SHARED FILTER FIELDS CONTENT COMPONENT
+// ----------------------------------------------------------------------
+interface FilterFieldsContentProps {
+  localFilters: FilterState;
+  onLocalChange: <K extends keyof FilterState>(key: K, value: FilterState[K]) => void;
+}
+
+const FilterFieldsContent: React.FC<FilterFieldsContentProps> = ({
+  localFilters,
+  onLocalChange
+}) => {
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      {/* Grid 1: Marka və Ban növü (Multi-Select Popovers) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+        {/* 1. Marka (Brand) */}
+        <TurboMultiSelect
+          label="Marka"
+          placeholder="Bütün markalar"
+          options={BRAND_OPTIONS}
+          value={localFilters.brand}
+          onChange={(selected) => onLocalChange('brand', selected)}
+        />
+
+        {/* 2. Ban növü (Body Type) */}
+        <TurboMultiSelect
+          label="Ban növü"
+          placeholder="Bütün ban növləri"
+          options={BODY_TYPE_OPTIONS}
+          value={localFilters.bodyType}
+          onChange={(selected) => onLocalChange('bodyType', selected)}
+        />
+      </div>
+
+      {/* Grid 2: Baza ölçüsü və Yanacaq növü */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+        {/* 3. Baza ölçüsü (Base Length) */}
+        <TurboMultiSelect
+          label="Baza ölçüsü"
+          placeholder="Bütün baza ölçüləri"
+          options={BASE_LENGTH_OPTIONS}
+          value={localFilters.baseLength}
+          onChange={(selected) => onLocalChange('baseLength', selected)}
+        />
+
+        {/* 4. Yanacaq növü (Fuel Type) */}
+        <TurboMultiSelect
+          label="Yanacaq növü"
+          placeholder="Bütün yanacaq növləri"
+          options={FUEL_TYPE_OPTIONS}
+          value={localFilters.fuelType}
+          onChange={(selected) => onLocalChange('fuelType', selected)}
+        />
+      </div>
+
+      {/* Grid 3: Sürətlər qutusu və İstehsal ili */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+        {/* 5. Sürətlər qutusu (Transmission) */}
+        <TurboMultiSelect
+          label="Sürətlər qutusu"
+          placeholder="Bütün sürətlər qutuları"
+          options={TRANSMISSION_OPTIONS}
+          value={localFilters.transmission}
+          onChange={(selected) => onLocalChange('transmission', selected)}
+        />
+
+        {/* 6. İstehsal ili (Min və Max - Custom Grid Popovers) */}
+        <div>
+          <label className="block text-xs font-black text-slate-500 tracking-wider mb-1.5 select-none">
+            İstehsal ili
+          </label>
+          <div className="grid grid-cols-2 gap-2.5">
+            <TurboYearSelect
+              placeholder="il, min."
+              value={localFilters.minYear}
+              years={YEARS_LIST}
+              onChange={(val) => onLocalChange('minYear', val)}
+            />
+
+            <TurboYearSelect
+              placeholder="il, maks."
+              value={localFilters.maxYear}
+              years={YEARS_LIST}
+              onChange={(val) => onLocalChange('maxYear', val)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Grid 4: Yürüş və Qiymət */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+        {/* 7. Yürüş, km */}
+        <div>
+          <label className="block text-xs font-black text-slate-500 tracking-wider mb-1.5 select-none">
+            Yürüş, km
+          </label>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="relative flex items-center">
+              <input
+                type="number"
+                min={0}
+                step={5000}
+                placeholder="min."
+                value={localFilters.minMileage > 0 ? localFilters.minMileage : ''}
+                onChange={(e) => onLocalChange('minMileage', e.target.value ? Number(e.target.value) : 0)}
+                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
+              />
+              {localFilters.minMileage > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onLocalChange('minMileage', 0)}
+                  className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
+                  title="Təmizlə"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="relative flex items-center">
+              <input
+                type="number"
+                min={0}
+                step={5000}
+                placeholder="maks."
+                value={localFilters.maxMileage > 0 ? localFilters.maxMileage : ''}
+                onChange={(e) => onLocalChange('maxMileage', e.target.value ? Number(e.target.value) : 0)}
+                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
+              />
+              {localFilters.maxMileage > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onLocalChange('maxMileage', 0)}
+                  className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
+                  title="Təmizlə"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 8. QİYMƏT, AZN */}
+        <div>
+          <label className="block text-xs font-black text-slate-500 tracking-wider mb-1.5 select-none">
+            Qiymət, AZN
+          </label>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="relative flex items-center">
+              <input
+                type="number"
+                min={0}
+                step={500}
+                placeholder="min."
+                value={localFilters.minPrice > 0 ? localFilters.minPrice : ''}
+                onChange={(e) => onLocalChange('minPrice', e.target.value ? Number(e.target.value) : 0)}
+                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
+              />
+              {localFilters.minPrice > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onLocalChange('minPrice', 0)}
+                  className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
+                  title="Təmizlə"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="relative flex items-center">
+              <input
+                type="number"
+                min={0}
+                step={500}
+                placeholder="maks."
+                value={localFilters.maxPrice > 0 ? localFilters.maxPrice : ''}
+                onChange={(e) => onLocalChange('maxPrice', e.target.value ? Number(e.target.value) : 0)}
+                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
+              />
+              {localFilters.maxPrice > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onLocalChange('maxPrice', 0)}
+                  className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
+                  title="Təmizlə"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ----------------------------------------------------------------------
+// 4. MAIN FILTER BAR COMPONENT
 // ----------------------------------------------------------------------
 export const FilterBar: React.FC<FilterBarProps> = ({
   cars = [],
@@ -424,15 +624,16 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 }) => {
   // Local state for modal to allow fast editing and live preview count
   const [localFilters, setLocalFilters] = useState<FilterState>(filters);
+  const desktopPanelRef = useRef<HTMLDivElement>(null);
 
   // Sync local filters when prop filters change
   useEffect(() => {
     setLocalFilters(filters);
   }, [filters]);
 
-  // Lock body scroll when modal is open
+  // Lock body scroll ONLY on mobile (< 768px) when modal is open
   useEffect(() => {
-    if (isModalOpen) {
+    if (isModalOpen && window.innerWidth < 768) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -441,6 +642,63 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       document.body.style.overflow = '';
     };
   }, [isModalOpen]);
+
+  // Keyboard accessibility: Escape key closes the filter panel and focus is trapped inside desktop dropdown
+  useEffect(() => {
+    if (!isModalOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false);
+        return;
+      }
+
+      if (e.key === 'Tab' && desktopPanelRef.current && window.innerWidth >= 768) {
+        const focusable = Array.from(
+          desktopPanelRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        ).filter(el => el.offsetParent !== null);
+
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, setIsModalOpen]);
+
+  // Click outside listener for desktop dropdown
+  useEffect(() => {
+    if (!isModalOpen) return;
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (window.innerWidth >= 768 && desktopPanelRef.current && !desktopPanelRef.current.contains(e.target as Node)) {
+        setIsModalOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isModalOpen, setIsModalOpen]);
 
   // Calculate active filter count
   const activeFilterCount = useMemo(() => [
@@ -463,6 +721,15 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     setLocalFilters(filters);
     setIsModalOpen(true);
   }, [filters, setIsModalOpen]);
+
+  const handleToggleModal = useCallback(() => {
+    if (isModalOpen) {
+      setIsModalOpen(false);
+    } else {
+      setLocalFilters(filters);
+      setIsModalOpen(true);
+    }
+  }, [isModalOpen, filters, setIsModalOpen]);
 
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
@@ -514,32 +781,116 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   };
 
   return (
-    <div id="katalog-filter" className="w-full relative z-10">
+    <div id="katalog-filter" className={`w-full relative ${isModalOpen ? 'z-50' : 'z-10'}`}>
       
       {/* ========================================================
           1. MAIN PAGE COMPACT TRIGGER (Only "Filtrlər" button & Sort)
          ======================================================== */}
       <div className="flex items-center justify-between gap-3">
         
-        {/* Main "Filtrlər" Trigger Button */}
-        <button
-          type="button"
-          onClick={handleOpenModal}
-          className={`flex items-center justify-center gap-2 sm:gap-2.5 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer select-none ${
-            isFiltered
-              ? 'bg-[#1D4ED8] text-white hover:bg-[#1E40AF] ring-2 ring-blue-500/30'
-              : 'bg-slate-900 text-white hover:bg-slate-800'
-          }`}
-          title="Filtrlər"
-        >
-          <SlidersHorizontal className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
-          <span>Filtrlər</span>
-          {activeFilterCount > 0 && (
-            <span className="bg-white text-[#1D4ED8] text-xs font-black px-2 py-0.5 rounded-full shadow-xs">
-              {activeFilterCount}
-            </span>
+        {/* Main "Filtrlər" Trigger Button + Desktop Dropdown Popover */}
+        <div className="relative" ref={desktopPanelRef}>
+          <button
+            type="button"
+            onClick={handleToggleModal}
+            aria-expanded={isModalOpen}
+            aria-haspopup="dialog"
+            className={`flex items-center justify-center gap-2 sm:gap-2.5 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer select-none ${
+              isFiltered
+                ? 'bg-[#1D4ED8] text-white hover:bg-[#1E40AF] ring-2 ring-blue-500/30'
+                : 'bg-slate-900 text-white hover:bg-slate-800'
+            }`}
+            title="Filtrlər"
+          >
+            <SlidersHorizontal className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            <span>Filtrlər</span>
+            {activeFilterCount > 0 && (
+              <span className="bg-white text-[#1D4ED8] text-xs font-black px-2 py-0.5 rounded-full shadow-xs">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          {/* Desktop Anchored Dropdown Popover (md: and above) */}
+          {isModalOpen && (
+            <>
+              {/* Semi-transparent Dimmed Backdrop on Desktop */}
+              <div
+                className="hidden md:block fixed inset-0 z-40 bg-slate-900/25 backdrop-blur-[1px] transition-opacity"
+                onClick={handleCloseModal}
+                aria-hidden="true"
+              />
+
+              {/* Anchored Dropdown Panel positioned directly below the button */}
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Filtrlər paneli"
+                className="hidden md:flex flex-col absolute top-full left-0 mt-2 z-50 w-[460px] max-w-[calc(100vw-32px)] bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150 origin-top-left"
+              >
+                {/* Header with Title, Active Filter Badge, Sıfırla and Close X */}
+                <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-[#1D4ED8]" />
+                    <span className="text-sm font-black text-[#0F172A]">Filtrlər</span>
+                    {activeFilterCount > 0 && (
+                      <span className="bg-[#1D4ED8] text-white text-[10px] font-black px-1.5 py-0.5 rounded-md shadow-2xs">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      className="text-xs font-bold text-[#1D4ED8] hover:text-[#1E40AF] active:text-[#1e3a8a] hover:bg-blue-50 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                      title="Bütün filtrləri sıfırla"
+                    >
+                      Sıfırla
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer"
+                      title="Bağla"
+                      aria-label="Filtrləri bağla"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Internal Scrollable Filter Fields Body */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[min(520px,calc(100vh-200px))] overscroll-contain">
+                  <FilterFieldsContent
+                    localFilters={localFilters}
+                    onLocalChange={handleLocalChange}
+                  />
+                </div>
+
+                {/* Footer Action: "Nəticələri göstər (X elan)" & "Sıfırla" */}
+                <div className="p-3 border-t border-slate-100 bg-white flex items-center gap-2 shrink-0 shadow-[0_-2px_10px_rgba(0,0,0,0.03)]">
+                  <button
+                    type="button"
+                    onClick={handleApply}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-[#1D4ED8] hover:bg-[#1E40AF] active:bg-[#1e3a8a] text-white font-bold text-xs sm:text-sm shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Nəticələri göstər ({totalResultsCount} elan)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="py-2.5 px-3 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-600 hover:bg-slate-50 font-bold text-xs transition-colors cursor-pointer"
+                    title="Bütün filtrləri sıfırla"
+                  >
+                    Sıfırla
+                  </button>
+                </div>
+              </div>
+            </>
           )}
-        </button>
+        </div>
 
         {/* Right Side: Sort dropdown */}
         <div className="flex items-center gap-2 shrink-0">
@@ -653,10 +1004,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       )}
 
       {/* ========================================================
-          2. FULL-SCREEN TURBO.AZ STYLE FILTER VIEW (Portaled to document.body)
+          2. FULL-SCREEN TURBO.AZ STYLE FILTER VIEW (Mobile only: below md)
          ======================================================== */}
       {isModalOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[999999] flex flex-col bg-white text-slate-900 animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-[999999] flex flex-col bg-white text-slate-900 animate-in fade-in duration-150 md:hidden">
           
           {/* ----------------------------------------------------
               HEADER HİSSƏSİ (Turbo.az Style 3-Column Layout):
@@ -701,198 +1052,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               SCROLLABLE FILTER SECTIONS WITH TURBO.AZ CUSTOM POPOVERS
              ---------------------------------------------------- */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 max-w-3xl mx-auto w-full overscroll-contain">
-            
-            {/* Grid 1: Marka və Ban növü (Multi-Select Popovers) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* 1. Marka (Brand) */}
-              <TurboMultiSelect
-                label="Marka"
-                placeholder="Bütün markalar"
-                options={BRAND_OPTIONS}
-                value={localFilters.brand}
-                onChange={(selected) => handleLocalChange('brand', selected)}
-              />
-
-              {/* 2. Ban növü (Body Type) */}
-              <TurboMultiSelect
-                label="Ban növü"
-                placeholder="Bütün ban növləri"
-                options={BODY_TYPE_OPTIONS}
-                value={localFilters.bodyType}
-                onChange={(selected) => handleLocalChange('bodyType', selected)}
-              />
-
-            </div>
-
-            {/* Grid 2: Baza ölçüsü və Yanacaq növü */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* 3. Baza ölçüsü (Base Length) */}
-              <TurboMultiSelect
-                label="Baza ölçüsü"
-                placeholder="Bütün baza ölçüləri"
-                options={BASE_LENGTH_OPTIONS}
-                value={localFilters.baseLength}
-                onChange={(selected) => handleLocalChange('baseLength', selected)}
-              />
-
-              {/* 4. Yanacaq növü (Fuel Type) */}
-              <TurboMultiSelect
-                label="Yanacaq növü"
-                placeholder="Bütün yanacaq növləri"
-                options={FUEL_TYPE_OPTIONS}
-                value={localFilters.fuelType}
-                onChange={(selected) => handleLocalChange('fuelType', selected)}
-              />
-
-            </div>
-
-            {/* Grid 3: Sürətlər qutusu və İstehsal ili */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* 5. Sürətlər qutusu (Transmission) */}
-              <TurboMultiSelect
-                label="Sürətlər qutusu"
-                placeholder="Bütün sürətlər qutuları"
-                options={TRANSMISSION_OPTIONS}
-                value={localFilters.transmission}
-                onChange={(selected) => handleLocalChange('transmission', selected)}
-              />
-
-              {/* 6. İstehsal ili (Min və Max - Custom Grid Popovers) */}
-              <div>
-                <label className="block text-xs font-black text-slate-500 tracking-wider mb-1.5 select-none">
-                  İstehsal ili
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <TurboYearSelect
-                    placeholder="il, min."
-                    value={localFilters.minYear}
-                    years={YEARS_LIST}
-                    onChange={(val) => handleLocalChange('minYear', val)}
-                  />
-
-                  <TurboYearSelect
-                    placeholder="il, maks."
-                    value={localFilters.maxYear}
-                    years={YEARS_LIST}
-                    onChange={(val) => handleLocalChange('maxYear', val)}
-                  />
-                </div>
-              </div>
-
-            </div>
-
-            {/* Grid 4: Yürüş və Qiymət */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* 7. Yürüş, km */}
-              <div>
-                <label className="block text-xs font-black text-slate-500 tracking-wider mb-1.5 select-none">
-                  Yürüş, km
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="relative flex items-center">
-                    <input
-                      type="number"
-                      min={0}
-                      step={5000}
-                      placeholder="min."
-                      value={localFilters.minMileage > 0 ? localFilters.minMileage : ''}
-                      onChange={(e) => handleLocalChange('minMileage', e.target.value ? Number(e.target.value) : 0)}
-                      className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
-                    />
-                    {localFilters.minMileage > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleLocalChange('minMileage', 0)}
-                        className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full"
-                        title="Təmizlə"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="relative flex items-center">
-                    <input
-                      type="number"
-                      min={0}
-                      step={5000}
-                      placeholder="maks."
-                      value={localFilters.maxMileage > 0 ? localFilters.maxMileage : ''}
-                      onChange={(e) => handleLocalChange('maxMileage', e.target.value ? Number(e.target.value) : 0)}
-                      className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
-                    />
-                    {localFilters.maxMileage > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleLocalChange('maxMileage', 0)}
-                        className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full"
-                        title="Təmizlə"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* 8. QİYMƏT, AZN */}
-              <div>
-                <label className="block text-xs font-black text-slate-500 tracking-wider mb-1.5 select-none">
-                  Qiymət, AZN
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="relative flex items-center">
-                    <input
-                      type="number"
-                      min={0}
-                      step={500}
-                      placeholder="min."
-                      value={localFilters.minPrice > 0 ? localFilters.minPrice : ''}
-                      onChange={(e) => handleLocalChange('minPrice', e.target.value ? Number(e.target.value) : 0)}
-                      className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
-                    />
-                    {localFilters.minPrice > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleLocalChange('minPrice', 0)}
-                        className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full"
-                        title="Təmizlə"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="relative flex items-center">
-                    <input
-                      type="number"
-                      min={0}
-                      step={500}
-                      placeholder="maks."
-                      value={localFilters.maxPrice > 0 ? localFilters.maxPrice : ''}
-                      onChange={(e) => handleLocalChange('maxPrice', e.target.value ? Number(e.target.value) : 0)}
-                      className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
-                    />
-                    {localFilters.maxPrice > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleLocalChange('maxPrice', 0)}
-                        className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full"
-                        title="Təmizlə"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
+            <FilterFieldsContent
+              localFilters={localFilters}
+              onLocalChange={handleLocalChange}
+            />
           </div>
 
           {/* ----------------------------------------------------
