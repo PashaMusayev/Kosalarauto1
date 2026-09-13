@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { SlidersHorizontal, ArrowLeft, ArrowUpDown, ChevronDown, Check, X } from 'lucide-react';
 import { FilterState, TransitCar } from '../types';
+import { countFilteredTransits } from '../utils/filterUtils';
 
 interface FilterBarProps {
   cars?: TransitCar[];
@@ -631,6 +632,12 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     setLocalFilters(filters);
   }, [filters]);
 
+  // Compute live preview count inside the modal/dropdown without affecting the catalog grid
+  const previewCount = useMemo(() => {
+    if (!cars || cars.length === 0) return 0;
+    return countFilteredTransits(cars, localFilters);
+  }, [cars, localFilters]);
+
   // Lock body scroll ONLY on mobile (< 768px) when modal is open
   useEffect(() => {
     if (isModalOpen && window.innerWidth < 768) {
@@ -741,10 +748,30 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       [key]: value
     };
     setLocalFilters(updated);
-    onFilterChange(updated); // Sync real-time so totalResultsCount updates immediately
+    // Note: onFilterChange is intentionally NOT called here to prevent premature catalog re-renders before clicking Apply
   };
 
   const handleReset = useCallback(() => {
+    const emptyFilters: FilterState = {
+      brand: [],
+      minYear: 'all',
+      maxYear: 'all',
+      year: 'all',
+      bodyType: [],
+      baseLength: [],
+      fuelType: [],
+      transmission: [],
+      minPrice: 0,
+      maxPrice: 0,
+      minMileage: 0,
+      maxMileage: 0,
+      searchQuery: '',
+      sortBy: 'featured'
+    };
+    setLocalFilters(emptyFilters);
+  }, []);
+
+  const handleResetAllAndApply = useCallback(() => {
     const emptyFilters: FilterState = {
       brand: [],
       minYear: 'all',
@@ -876,7 +903,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                     onClick={handleApply}
                     className="flex-1 py-2.5 px-4 rounded-xl bg-[#1D4ED8] hover:bg-[#1E40AF] active:bg-[#1e3a8a] text-white font-bold text-xs sm:text-sm shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>Nəticələri göstər ({totalResultsCount} elan)</span>
+                    <span>Nəticələri göstər ({previewCount} elan)</span>
                   </button>
                   <button
                     type="button"
@@ -995,7 +1022,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           )}
 
           <button
-            onClick={handleReset}
+            onClick={handleResetAllAndApply}
             className="text-[11px] font-bold text-red-600 hover:underline ml-1 cursor-pointer"
           >
             Hamısını sıfırla
@@ -1068,7 +1095,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 onClick={handleApply}
                 className="w-full py-4 px-6 rounded-2xl bg-[#1D4ED8] hover:bg-[#1E40AF] active:bg-[#1e3a8a] text-white font-black text-base shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Axtar ({totalResultsCount} elan)</span>
+                <span>Axtar ({previewCount} elan)</span>
               </button>
             </div>
           </div>
