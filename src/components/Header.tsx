@@ -8,13 +8,15 @@ import { trackWhatsAppClick } from '../services/analyticsService';
 interface HeaderProps {
   favoritesCount: number;
   onOpenFavorites: () => void;
-  onNavigate: (sectionId: string) => void;
+  onNavigate: (sectionOrPath: string) => void;
+  currentPath?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   favoritesCount,
   onOpenFavorites,
-  onNavigate
+  onNavigate,
+  currentPath = '/'
 }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -31,12 +33,28 @@ export const Header: React.FC<HeaderProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleLinkClick = (id: string) => {
+  const handleNav = (target: string) => {
     setMobileMenuOpen(false);
-    // Request animation frame allows mobile menu to close smoothly before scroll offset is calculated
-    requestAnimationFrame(() => {
-      onNavigate(id);
-    });
+    if (target === '/haqqimizda' || target === 'haqqimizda') {
+      try {
+        window.history.pushState({}, '', '/haqqimizda');
+      } catch (e) {}
+      onNavigate('/haqqimizda');
+    } else if (target === '/elaqe' || target === 'elaqe') {
+      try {
+        window.history.pushState({}, '', '/elaqe');
+      } catch (e) {}
+      onNavigate('/elaqe');
+    } else if (target === '/' || target === 'hero' || target === 'home') {
+      try {
+        window.history.pushState({}, '', '/');
+      } catch (e) {}
+      onNavigate('/');
+    } else if (target === 'movcud-avtomobiller') {
+      onNavigate('movcud-avtomobiller');
+    } else {
+      onNavigate(target);
+    }
   };
 
   return (
@@ -64,8 +82,8 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between">
         {/* Logo */}
         <button 
-          onClick={() => handleLinkClick('hero')} 
-          className="flex items-center gap-3 group text-left"
+          onClick={() => handleNav('/')} 
+          className="flex items-center gap-3 group text-left cursor-pointer"
         >
           <div className="w-11 h-11 rounded-xl overflow-hidden bg-[#0F172A] flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform border border-slate-200">
             <img 
@@ -92,26 +110,38 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-8">
           <button 
-            onClick={() => handleLinkClick('hero')} 
-            className="text-sm font-bold text-[#0F172A] hover:text-[#1D4ED8] transition-colors"
+            onClick={() => handleNav('/')} 
+            className={`text-sm font-bold transition-colors cursor-pointer ${
+              currentPath === '/' || currentPath === '' || currentPath === '/index.html'
+                ? 'text-[#1D4ED8]'
+                : 'text-[#0F172A] hover:text-[#1D4ED8]'
+            }`}
           >
             Ana səhifə
           </button>
           <button 
-            onClick={() => handleLinkClick('movcud-avtomobiller')} 
-            className="text-sm font-bold text-[#0F172A] hover:text-[#1D4ED8] transition-colors"
+            onClick={() => handleNav('movcud-avtomobiller')} 
+            className="text-sm font-bold text-[#0F172A] hover:text-[#1D4ED8] transition-colors cursor-pointer"
           >
             Avtomobillər
           </button>
           <button 
-            onClick={() => handleLinkClick('haqqimizda')} 
-            className="text-sm font-bold text-[#0F172A] hover:text-[#1D4ED8] transition-colors"
+            onClick={() => handleNav('/haqqimizda')} 
+            className={`text-sm font-bold transition-colors cursor-pointer ${
+              currentPath === '/haqqimizda' || currentPath === '/haqqimizda/'
+                ? 'text-[#1D4ED8]'
+                : 'text-[#0F172A] hover:text-[#1D4ED8]'
+            }`}
           >
             Haqqımızda
           </button>
           <button 
-            onClick={() => handleLinkClick('elaqe')} 
-            className="text-sm font-bold text-[#0F172A] hover:text-[#1D4ED8] transition-colors"
+            onClick={() => handleNav('/elaqe')} 
+            className={`text-sm font-bold transition-colors cursor-pointer ${
+              currentPath === '/elaqe' || currentPath === '/elaqe/'
+                ? 'text-[#1D4ED8]'
+                : 'text-[#0F172A] hover:text-[#1D4ED8]'
+            }`}
           >
             Əlaqə
           </button>
@@ -191,26 +221,38 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="sm:hidden bg-white px-4 pt-3 pb-6 mt-3 space-y-3 shadow-xl rounded-b-2xl animate-in fade-in slide-in-from-top-4 duration-200">
           <nav className="flex flex-col space-y-2">
             <button 
-              onClick={() => handleLinkClick('hero')} 
-              className="text-left px-3 py-2 rounded-lg text-[#0F172A] hover:bg-slate-100 font-bold text-sm"
+              onClick={() => handleNav('/')} 
+              className={`text-left px-3 py-2 rounded-lg font-bold text-sm transition-colors cursor-pointer ${
+                currentPath === '/' || currentPath === '' || currentPath === '/index.html'
+                  ? 'bg-blue-50 text-[#1D4ED8]'
+                  : 'text-[#0F172A] hover:bg-slate-100'
+              }`}
             >
               Ana səhifə
             </button>
             <button 
-              onClick={() => handleLinkClick('movcud-avtomobiller')} 
-              className="text-left px-3 py-2 rounded-lg text-[#0F172A] hover:bg-slate-100 font-bold text-sm"
+              onClick={() => handleNav('movcud-avtomobiller')} 
+              className="text-left px-3 py-2 rounded-lg text-[#0F172A] hover:bg-slate-100 font-bold text-sm cursor-pointer"
             >
               Avtomobillər (kataloq)
             </button>
             <button 
-              onClick={() => handleLinkClick('haqqimizda')} 
-              className="text-left px-3 py-2 rounded-lg text-[#0F172A] hover:bg-slate-100 font-bold text-sm"
+              onClick={() => handleNav('/haqqimizda')} 
+              className={`text-left px-3 py-2 rounded-lg font-bold text-sm transition-colors cursor-pointer ${
+                currentPath === '/haqqimizda' || currentPath === '/haqqimizda/'
+                  ? 'bg-blue-50 text-[#1D4ED8]'
+                  : 'text-[#0F172A] hover:bg-slate-100'
+              }`}
             >
               Haqqımızda
             </button>
             <button 
-              onClick={() => handleLinkClick('elaqe')} 
-              className="text-left px-3 py-2 rounded-lg text-[#0F172A] hover:bg-slate-100 font-bold text-sm"
+              onClick={() => handleNav('/elaqe')} 
+              className={`text-left px-3 py-2 rounded-lg font-bold text-sm transition-colors cursor-pointer ${
+                currentPath === '/elaqe' || currentPath === '/elaqe/'
+                  ? 'bg-blue-50 text-[#1D4ED8]'
+                  : 'text-[#0F172A] hover:bg-slate-100'
+              }`}
             >
               Əlaqə
             </button>

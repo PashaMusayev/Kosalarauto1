@@ -9,6 +9,7 @@ import { Pagination } from './components/Pagination';
 import { AboutUs } from './components/AboutUs';
 import { FavoritesDrawer } from './components/FavoritesDrawer';
 import { ContactFooter } from './components/ContactFooter';
+import { Footer } from './components/Footer';
 import { AdminErrorBoundary } from './components/AdminErrorBoundary';
 import { NotFound } from './components/NotFound';
 import { INITIAL_TRANSITS, WHATSAPP_NUMBER, WHATSAPP_DIRECT_LINK } from './data/transits';
@@ -51,8 +52,11 @@ const CARS_PER_PAGE = 12;
 
 const normalizePath = (p: string) => {
   try {
-    const clean = p.toLowerCase().trim();
+    let clean = p.toLowerCase().trim();
     if (!clean || clean === '' || clean === '/index.html') return '/';
+    if (clean.length > 1 && clean.endsWith('/')) {
+      clean = clean.slice(0, -1);
+    }
     return clean;
   } catch (e) {
     return '/';
@@ -90,17 +94,19 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const p = normalizePath(window.location.pathname);
-      return p === '/admin444' || p === '/admin444/';
+      return p === '/admin444';
     }
     return false;
   });
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   // Determine if the current route is 404 (Not Found)
-  // Valid routes: '/' (home/catalog), '/admin444', '/admin444/'
+  // Valid routes: '/' (home/catalog), '/admin444', '/haqqimizda', '/elaqe'
   const isHomeRoute = currentPath === '/' || currentPath === '' || currentPath === '/index.html';
-  const isAdminRoute = currentPath === '/admin444' || currentPath === '/admin444/';
-  const is404 = !isHomeRoute && !isAdminRoute;
+  const isAdminRoute = currentPath === '/admin444';
+  const isAboutRoute = currentPath === '/haqqimizda';
+  const isContactRoute = currentPath === '/elaqe';
+  const is404 = !isHomeRoute && !isAdminRoute && !isAboutRoute && !isContactRoute;
 
   // Sync favorites changes with localStorage
   useEffect(() => {
@@ -117,6 +123,10 @@ export default function App() {
       document.title = "404 - Səhifə tapılmadı | Kosalar Auto";
     } else if (adminOpen || isAdminRoute) {
       document.title = "Admin panel - Kosalar Auto";
+    } else if (isAboutRoute) {
+      document.title = "Haqqımızda | Kosalar Auto";
+    } else if (isContactRoute) {
+      document.title = "Əlaqə | Kosalar Auto";
     } else {
       document.title = "Kosalar Auto - Ford Transit satış mərkəzi";
     }
@@ -194,7 +204,7 @@ export default function App() {
       if (bc) bc.close();
       window.removeEventListener('carsUpdated', handleExplicitUpdate);
     };
-  }, [adminOpen, isAdminRoute, is404]);
+  }, [adminOpen, isAdminRoute, isAboutRoute, isContactRoute, is404]);
 
   // Keep selectedCar in sync if transits update (e.g. photos/price changed in admin)
   useEffect(() => {
@@ -220,7 +230,7 @@ export default function App() {
 
       const p = normalizePath(window.location.pathname);
       setCurrentPath(p);
-      if (p === '/admin444' || p === '/admin444/') {
+      if (p === '/admin444') {
         setAdminOpen(true);
       }
     } catch (e) {}
@@ -228,17 +238,18 @@ export default function App() {
     const handlePopState = () => {
       const p = normalizePath(window.location.pathname);
       setCurrentPath(p);
-      if (p === '/admin444' || p === '/admin444/') {
+      if (p === '/admin444') {
         setAdminOpen(true);
       } else {
         setAdminOpen(false);
       }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleHashChange = () => {
       const p = normalizePath(window.location.pathname);
       setCurrentPath(p);
-      if (p === '/admin444' || p === '/admin444/') {
+      if (p === '/admin444') {
         setAdminOpen(true);
       }
     };
@@ -540,6 +551,47 @@ export default function App() {
     }
   }, []);
 
+  // Handle site navigation between routes and catalog sections
+  const handleNavigate = useCallback((target: string) => {
+    if (target === '/haqqimizda' || target === 'haqqimizda') {
+      try {
+        window.history.pushState({}, '', '/haqqimizda');
+      } catch (e) {}
+      setCurrentPath('/haqqimizda');
+      setAdminOpen(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (target === '/elaqe' || target === 'elaqe') {
+      try {
+        window.history.pushState({}, '', '/elaqe');
+      } catch (e) {}
+      setCurrentPath('/elaqe');
+      setAdminOpen(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (target === '/' || target === 'hero' || target === 'home') {
+      try {
+        window.history.pushState({}, '', '/');
+      } catch (e) {}
+      setCurrentPath('/');
+      setAdminOpen(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (target === 'movcud-avtomobiller' || target === 'katalog') {
+      if (currentPath !== '/') {
+        try {
+          window.history.pushState({}, '', '/');
+        } catch (e) {}
+        setCurrentPath('/');
+        setAdminOpen(false);
+        setTimeout(() => {
+          scrollToSection('movcud-avtomobiller');
+        }, 50);
+      } else {
+        scrollToSection('movcud-avtomobiller');
+      }
+    } else {
+      scrollToSection(target);
+    }
+  }, [currentPath, scrollToSection]);
+
   // Handle page change and smoothly scroll back to top of catalog listings
   const handlePageChange = useCallback((newPage: number) => {
     setCurrentPage(newPage);
@@ -551,8 +603,8 @@ export default function App() {
   }, []);
 
   const handleCallHero = useCallback(() => {
-    scrollToSection('elaqe');
-  }, [scrollToSection]);
+    handleNavigate('/elaqe');
+  }, [handleNavigate]);
 
   const handleResetFilters = useCallback(() => {
     setFilters(DEFAULT_FILTERS);
@@ -570,110 +622,145 @@ export default function App() {
       <Header
         favoritesCount={favoriteCars.length}
         onOpenFavorites={handleOpenFavorites}
-        onNavigate={scrollToSection}
+        onNavigate={handleNavigate}
+        currentPath={currentPath}
       />
 
       {/* Main Content */}
       <main className="flex-1">
-        
-        {/* Hero Section */}
-        <Hero
-          onCall={handleCallHero}
-        />
-
-        {/* Filter & Catalog Section */}
-        <section id="katalog" className="py-4 sm:py-6 lg:py-7 bg-[#F8FAFC] scroll-mt-20 sm:scroll-mt-24">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-3 sm:space-y-4">
-            
-            {/* Search Filter Bar */}
-            <FilterBar
-              cars={transits}
-              filters={filters}
-              onFilterChange={setFilters}
-              onResetFilters={handleResetFilters}
-              totalResultsCount={filteredTransits.length}
-              isModalOpen={filterModalOpen}
-              setIsModalOpen={setFilterModalOpen}
+        {isAboutRoute ? (
+          /* Haqqımızda (About Us) Standalone Page View */
+          <div>
+            <div className="bg-white border-b border-slate-200/80 py-3.5">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-2 text-xs font-semibold text-slate-500">
+                <button 
+                  onClick={() => handleNavigate('/')} 
+                  className="hover:text-[#1D4ED8] transition-colors cursor-pointer"
+                >
+                  Ana səhifə
+                </button>
+                <span className="text-slate-300">/</span>
+                <span className="text-[#0F172A] font-bold">Haqqımızda</span>
+              </div>
+            </div>
+            <AboutUs />
+          </div>
+        ) : isContactRoute ? (
+          /* Əlaqə (Contact) Standalone Page View */
+          <div>
+            <div className="bg-white border-b border-slate-200/80 py-3.5">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-2 text-xs font-semibold text-slate-500">
+                <button 
+                  onClick={() => handleNavigate('/')} 
+                  className="hover:text-[#1D4ED8] transition-colors cursor-pointer"
+                >
+                  Ana səhifə
+                </button>
+                <span className="text-slate-300">/</span>
+                <span className="text-[#0F172A] font-bold">Əlaqə</span>
+              </div>
+            </div>
+            <ContactFooter />
+          </div>
+        ) : (
+          /* Homepage: dedicated purely to the car catalog */
+          <>
+            {/* Hero Section */}
+            <Hero
+              onCall={handleCallHero}
             />
 
-            {/* Catalog Grid */}
-            <div id="movcud-avtomobiller" className="scroll-mt-20 sm:scroll-mt-24">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5 sm:mb-3.5">
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight">
-                    Elanlar
-                  </h2>
-                </div>
+            {/* Filter & Catalog Section */}
+            <section id="katalog" className="py-4 sm:py-6 lg:py-7 bg-[#F8FAFC] scroll-mt-20 sm:scroll-mt-24">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-3 sm:space-y-4">
+                
+                {/* Search Filter Bar */}
+                <FilterBar
+                  cars={transits}
+                  filters={filters}
+                  onFilterChange={setFilters}
+                  onResetFilters={handleResetFilters}
+                  totalResultsCount={filteredTransits.length}
+                  isModalOpen={filterModalOpen}
+                  setIsModalOpen={setFilterModalOpen}
+                />
 
-                <div className="flex items-center gap-2 self-start sm:self-auto">
-                  <span className="text-xs font-bold text-[#0F172A] bg-white px-3.5 py-1.5 rounded-xl border border-slate-200/50 shadow-xs">
-                    {isLoading ? 'Yüklənir...' : `Ümumi: ${filteredTransits.length} model`}
-                  </span>
-                  {!isLoading && totalPages > 1 && (
-                    <span className="text-xs font-bold text-[#1D4ED8] bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200/60 shadow-xs">
-                      Səhifə {safeCurrentPage} / {totalPages}
-                    </span>
+                {/* Catalog Grid */}
+                <div id="movcud-avtomobiller" className="scroll-mt-20 sm:scroll-mt-24">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5 sm:mb-3.5">
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight">
+                        Elanlar
+                      </h2>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <span className="text-xs font-bold text-[#0F172A] bg-white px-3.5 py-1.5 rounded-xl border border-slate-200/50 shadow-xs">
+                        {isLoading ? 'Yüklənir...' : `Ümumi: ${filteredTransits.length} model`}
+                      </span>
+                      {!isLoading && totalPages > 1 && (
+                        <span className="text-xs font-bold text-[#1D4ED8] bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200/60 shadow-xs">
+                          Səhifə {safeCurrentPage} / {totalPages}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {isLoading ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5 lg:gap-4">
+                      {Array.from({ length: 8 }).map((_, index) => (
+                        <TransitCardSkeleton key={index} />
+                      ))}
+                    </div>
+                  ) : filteredTransits.length === 0 ? (
+                    <div className="bg-white rounded-2xl p-12 text-center border border-slate-200/60 shadow-sm max-w-xl mx-auto my-8 space-y-4">
+                      <div className="w-16 h-16 rounded-2xl bg-blue-50 text-[#1D4ED8] flex items-center justify-center mx-auto">
+                        <FilterX className="w-8 h-8" />
+                      </div>
+                      <h3 className="text-lg font-bold text-[#0F172A]">Axtarışınıza uyğun model tapılmadı</h3>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Axtarış filtrlərini və ya qiymət aralığını dəyişərək yenidən cəhd edin və ya bütün avtomobillərə baxın.
+                      </p>
+                      <button
+                        onClick={handleResetFilters}
+                        className="bg-[#1D4ED8] hover:bg-[#1E40AF] text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-sm transition-colors cursor-pointer"
+                      >
+                        Filtri sıfırla
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5 lg:gap-4">
+                        {paginatedTransits.map((car, idx) => (
+                          <TransitCard
+                            key={car.id}
+                            car={car}
+                            onViewDetails={handleOpenDetail}
+                            isFavorite={favorites.includes(car.id)}
+                            onToggleFavorite={handleToggleFavorite}
+                            priority={idx < 4}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Turbo.az Style Pagination Controls */}
+                      <Pagination
+                        currentPage={safeCurrentPage}
+                        totalPages={totalPages}
+                        onPageChange={handlePageChange}
+                      />
+                    </>
                   )}
                 </div>
+
               </div>
-
-              {isLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5 lg:gap-4">
-                  {Array.from({ length: 8 }).map((_, index) => (
-                    <TransitCardSkeleton key={index} />
-                  ))}
-                </div>
-              ) : filteredTransits.length === 0 ? (
-                <div className="bg-white rounded-2xl p-12 text-center border border-slate-200/60 shadow-sm max-w-xl mx-auto my-8 space-y-4">
-                  <div className="w-16 h-16 rounded-2xl bg-blue-50 text-[#1D4ED8] flex items-center justify-center mx-auto">
-                    <FilterX className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-lg font-bold text-[#0F172A]">Axtarışınıza uyğun model tapılmadı</h3>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Axtarış filtrlərini və ya qiymət aralığını dəyişərək yenidən cəhd edin və ya bütün avtomobillərə baxın.
-                  </p>
-                  <button
-                    onClick={handleResetFilters}
-                    className="bg-[#1D4ED8] hover:bg-[#1E40AF] text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-sm transition-colors"
-                  >
-                    Filtri sıfırla
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5 lg:gap-4">
-                    {paginatedTransits.map((car, idx) => (
-                      <TransitCard
-                        key={car.id}
-                        car={car}
-                        onViewDetails={handleOpenDetail}
-                        isFavorite={favorites.includes(car.id)}
-                        onToggleFavorite={handleToggleFavorite}
-                        priority={idx < 4}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Turbo.az Style Pagination Controls */}
-                  <Pagination
-                    currentPage={safeCurrentPage}
-                    totalPages={totalPages}
-                    onPageChange={handlePageChange}
-                  />
-                </>
-              )}
-            </div>
-
-          </div>
-        </section>
-
-        {/* Haqqımızda (About Us) Section */}
-        <AboutUs />
-
+            </section>
+          </>
+        )}
       </main>
 
       {/* Footer */}
-      <ContactFooter />
+      {!isContactRoute && <Footer onNavigate={handleNavigate} />}
 
       {/* Floating WhatsApp Quick Action Button (Hidden when Car Details Modal, drawers or Filter modal are open) */}
       {!selectedCar && !favoritesOpen && !adminOpen && !filterModalOpen && (
