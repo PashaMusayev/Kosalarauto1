@@ -842,7 +842,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       className={`relative select-none overflow-hidden block ${
         isLightbox
           ? 'h-full w-full flex-1 min-h-0 bg-black'
-          : (className || 'bg-black w-full aspect-[4/3] md:aspect-auto md:h-[500px] mx-auto flex items-center justify-center')
+          : `group ${className || 'bg-black w-full aspect-[4/3] md:aspect-auto md:h-[500px] mx-auto flex items-center justify-center'}`
       }`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -884,22 +884,26 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
         </div>
       </div>
 
-      {/* Turbo.az Sağ Aşağı Künc Şəkil Sayğacı (Yalnız qeyri-lightbox rejimdə göstərilir) */}
+      {/* Turbo.az Sağ Aşağı Künc Şəkil Sayğacı (Yalnız qeyri-lightbox rejimdə göstərilir; desktopda hover zamanı görünür) */}
       {!isLightbox && (
-        <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 pointer-events-none flex items-center gap-1 px-3 py-1 rounded-full bg-black/75 backdrop-blur-md text-white text-xs sm:text-[13px] font-semibold border border-white/20 shadow-md">
+        <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 pointer-events-none flex items-center gap-1 px-3 py-1 rounded-full bg-black/75 backdrop-blur-md text-white text-xs sm:text-[13px] font-semibold border border-white/20 shadow-md opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
           <span>{activeImageIndex + 1}</span>
           <span className="text-white/60 font-light">/</span>
           <span className="text-white/90">{totalImages}</span>
         </div>
       )}
 
-      {/* Turbo.az Desktop Ox Düymələri */}
+      {/* Turbo.az Desktop Ox Düymələri (Non-lightbox desktop rejimində hover zamanı görünür, lightbox-da və mobildə həmişə aktivdir) */}
       {totalImages > 1 && (
         <>
           <button
             type="button"
             onClick={handlePrev}
-            className="hidden sm:flex absolute left-3.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white items-center justify-center z-20 border border-white/20 transition-all cursor-pointer shadow-md"
+            className={`hidden sm:flex absolute left-3.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white items-center justify-center z-20 border border-white/20 transition-all cursor-pointer shadow-md ${
+              !isLightbox
+                ? 'opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 duration-200'
+                : 'opacity-100'
+            }`}
             title="Əvvəlki şəkil"
             aria-label="Əvvəlki şəkil"
           >
@@ -908,7 +912,11 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
           <button
             type="button"
             onClick={handleNext}
-            className="hidden sm:flex absolute right-3.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white items-center justify-center z-20 border border-white/20 transition-all cursor-pointer shadow-md"
+            className={`hidden sm:flex absolute right-3.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white items-center justify-center z-20 border border-white/20 transition-all cursor-pointer shadow-md ${
+              !isLightbox
+                ? 'opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 duration-200'
+                : 'opacity-100'
+            }`}
             title="Növbəti şəkil"
             aria-label="Növbəti şəkil"
           >
