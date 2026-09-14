@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react';
 import useEmblaCarousel from 'embla-carousel-react';
 import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl, handleImageLoadError } from '../utils/imageFallback';
 import { prefetchCarouselWindow } from '../utils/imagePreloader';
@@ -13,6 +13,7 @@ interface TurboImageSliderProps {
   isLightbox?: boolean;
   disabledKeyNav?: boolean;
   className?: string;
+  onOpenPhotoGrid?: () => void;
 }
 
 interface SlideItemProps {
@@ -574,6 +575,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   isLightbox = false,
   disabledKeyNav = false,
   className,
+  onOpenPhotoGrid,
 }) => {
   const imagesList = useMemo(() => {
     return images && images.length > 0 ? images : [DEFAULT_VEHICLE_PLACEHOLDER];
@@ -884,12 +886,32 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
         </div>
       </div>
 
-      {/* Turbo.az Sağ Aşağı Künc Şəkil Sayğacı (Yalnız qeyri-lightbox rejimdə göstərilir; desktopda hover zamanı görünür) */}
+      {/* Turbo.az Sağ Aşağı Künc Nəzarətləri (Sayğac və Mobil "Bütün şəkillər" Düyməsi) */}
       {!isLightbox && (
-        <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 pointer-events-none flex items-center gap-1 px-3 py-1 rounded-full bg-black/75 backdrop-blur-md text-white text-xs sm:text-[13px] font-semibold border border-white/20 shadow-md opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
-          <span>{activeImageIndex + 1}</span>
-          <span className="text-white/60 font-light">/</span>
-          <span className="text-white/90">{totalImages}</span>
+        <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 flex items-center gap-2">
+          {/* Mobil "Bütün şəkillər" düyməsi (Yalnız mobil: md:hidden) */}
+          {onOpenPhotoGrid && totalImages > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenPhotoGrid();
+              }}
+              className="md:hidden flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/75 hover:bg-black/90 active:scale-95 text-white text-xs font-semibold border border-white/20 shadow-md backdrop-blur-md transition-all cursor-pointer select-none"
+              title="Bütün şəkillər"
+              aria-label="Bütün şəkillər"
+            >
+              <LayoutGrid className="w-3.5 h-3.5 text-white" />
+              <span>Bütün şəkillər</span>
+            </button>
+          )}
+
+          {/* Şəkil Sayğacı (Desktopda hover zamanı görünür, mobildə həmişə aktivdir) */}
+          <div className="pointer-events-none flex items-center gap-1 px-3 py-1 rounded-full bg-black/75 backdrop-blur-md text-white text-xs sm:text-[13px] font-semibold border border-white/20 shadow-md opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
+            <span>{activeImageIndex + 1}</span>
+            <span className="text-white/60 font-light">/</span>
+            <span className="text-white/90">{totalImages}</span>
+          </div>
         </div>
       )}
 

@@ -22,6 +22,7 @@ import { DetailFeaturesAndShowroom } from './detail/DetailFeaturesAndShowroom';
 import { DetailSimilarCars } from './detail/DetailSimilarCars';
 import { DetailMobileBottomBar } from './detail/DetailMobileBottomBar';
 import { DetailLightbox } from './detail/DetailLightbox';
+import { DetailPhotoGrid } from './detail/DetailPhotoGrid';
 
 export { formatBrandDisplayName, formatModelDisplayName };
 
@@ -51,12 +52,14 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [copied, setCopied] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [isPhotoGridOpen, setIsPhotoGridOpen] = useState(false);
 
   // Reset active image & scroll to top when car changes
   useEffect(() => {
     setActiveImageIndex(0);
     setCopied(false);
     setIsLightboxOpen(false);
+    setIsPhotoGridOpen(false);
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
     }
@@ -98,7 +101,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     }
   }, [imagesList, activeImageIndex]);
 
-  // Keyboard navigation (Escape to close lightbox or modal; Arrow keys handled by active slider)
+  // Keyboard navigation (Escape to close lightbox, photo grid or modal; Arrow keys handled by active slider)
   useEffect(() => {
     if (!car) return;
 
@@ -106,6 +109,8 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
       if (e.key === 'Escape') {
         if (isLightboxOpen) {
           setIsLightboxOpen(false);
+        } else if (isPhotoGridOpen) {
+          setIsPhotoGridOpen(false);
         } else {
           onClose();
         }
@@ -114,7 +119,14 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [car, isLightboxOpen, onClose]);
+  }, [car, isLightboxOpen, isPhotoGridOpen, onClose]);
+
+  // Photo Grid seçimi: Şəklin indeksini təyin et, qridi bağla və lightbox-u aç
+  const handleSelectPhotoFromGrid = useCallback((index: number) => {
+    setActiveImageIndex(index);
+    setIsPhotoGridOpen(false);
+    setIsLightboxOpen(true);
+  }, []);
 
   // Check if car object is valid
   if (!car) return null;
@@ -336,7 +348,8 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
                     }
                     setIsLightboxOpen(true);
                   }}
-                  disabledKeyNav={isLightboxOpen}
+                  onOpenPhotoGrid={() => setIsPhotoGridOpen(true)}
+                  disabledKeyNav={isLightboxOpen || isPhotoGridOpen}
                   className="w-full aspect-[4/3] md:aspect-auto md:h-[500px] flex items-center justify-center bg-black"
                 />
               </div>
@@ -409,6 +422,15 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
           <DetailMobileBottomBar whatsappUrl={whatsappUrl} />
         </div>
       </div>
+
+      {/* Mobile-only "Bütün şəkillər" Grid Gallery (Turbo.az Style) */}
+      <DetailPhotoGrid
+        isOpen={isPhotoGridOpen}
+        onClose={() => setIsPhotoGridOpen(false)}
+        imagesList={imagesList}
+        title={vehicleMainTitle || safeTitle}
+        onSelectPhoto={handleSelectPhotoFromGrid}
+      />
 
       {/* Fullscreen Photo Lightbox (Turbo.az Style - Desktop & Mobile) */}
       <DetailLightbox
