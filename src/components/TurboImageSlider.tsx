@@ -18,6 +18,7 @@ interface TurboImageSliderProps {
 interface SlideItemProps {
   slide: { src: string; originalIndex: number };
   activeImageIndex: number;
+  totalImages: number;
   safeTitle: string;
   isLightbox: boolean;
   isPreloadAllowed: boolean;
@@ -25,11 +26,21 @@ interface SlideItemProps {
   onZoomChange?: (isZoomed: boolean) => void;
   onCancelDrag?: () => void;
   onTouchActivity?: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+}
+
+enum GestureState {
+  IDLE = 'IDLE',
+  PINCH = 'PINCH',
+  PAN = 'PAN',
+  SWIPE = 'SWIPE',
 }
 
 const SlideItem = React.memo<SlideItemProps>(({
   slide,
   activeImageIndex,
+  totalImages,
   safeTitle,
   isLightbox,
   isPreloadAllowed,
@@ -37,10 +48,11 @@ const SlideItem = React.memo<SlideItemProps>(({
   onZoomChange,
   onCancelDrag,
   onTouchActivity,
+  onPrev,
+  onNext,
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
-  const [scale, setScale] = useState(1);
-  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const [isZoomed, setIsZoomed] = useState(false);
 
   const isActive = slide.originalIndex === activeImageIndex;
 
@@ -48,32 +60,29 @@ const SlideItem = React.memo<SlideItemProps>(({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // References to keep gesture math synchronous without re-renders during 60fps touchmove
-  const scaleRef = useRef(1);
-  const translateRef = useRef({ x: 0, y: 0 });
-  const isZoomedRef = useRef(false);
+  // Authoritative synchronous refs for 60fps gesture transforms (immune to React render lag)
+  const currentScaleRef = useRef(1);
+  const currentTranslateRef = useRef({ x: 0, y: 0 });
+  const gestureStateRef = useRef<GestureState>(GestureState.IDLE);
 
-  // Gesture tracking
+  // Pinch tracking
   const pinchStartDistRef = useRef(0);
   const pinchStartScaleRef = useRef(1);
-  const pinchStartCenterRef = useRef({ x: 0, y: 0 });
   const pinchStartTranslateRef = useRef({ x: 0, y: 0 });
+  const pinchStartFocalRef = useRef({ x: 0, y: 0 });
+  const pinchStartCenterScreenRef = useRef({ x: 0, y: 0 });
 
+  // Pan tracking
   const panStartTouchRef = useRef({ x: 0, y: 0 });
   const panStartTranslateRef = useRef({ x: 0, y: 0 });
-  const isPanningRef = useRef(false);
-  const isPinchingRef = useRef(false);
+  const panBoundaryOverflowXRef = useRef(0);
+  const panHasMovedRef = useRef(false);
 
   // Tap & double-tap tracking
   const lastTapTimeRef = useRef(0);
   const lastTapPosRef = useRef({ x: 0, y: 0 });
-  const touchStartPosRef = useRef({ x: 0, y: 0 });
-  const touchMovedRef = useRef(false);
-
-  // Sync internal refs
-  scaleRef.current = scale;
-  translateRef.current = translate;
-  isZoomedRef.current = scale > 1.02;
+  const touchStartTimeRef = useRef(0);
+  const suppressClickUntilRef = useRef(0);
 
   // If image is already complete in browser HTTP cache, mark loaded immediately
   useEffect(() => {
@@ -82,8 +91,11 @@ const SlideItem = React.memo<SlideItemProps>(({
     }
   }, [slide.src, isPreloadAllowed]);
 
-  // Apply transform with or without CSS transition directly to DOM for 60fps responsiveness
+  // Apply transform directly to DOM for 60fps responsiveness
   const applyTransform = useCallback((s: number, x: number, y: number, withTransition: boolean) => {
+    currentScaleRef.current = s;
+    currentTranslateRef.current = { x, y };
+
     if (!wrapperRef.current) return;
     wrapperRef.current.style.transition = withTransition
       ? 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)'
@@ -91,25 +103,19 @@ const SlideItem = React.memo<SlideItemProps>(({
     wrapperRef.current.style.transform = `translate3d(${x}px, ${y}px, 0px) scale(${s})`;
   }, []);
 
-  // Reset zoom helper
-  const handleResetZoom = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
-    if (e) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-    setScale(1);
-    setTranslate({ x: 0, y: 0 });
-    scaleRef.current = 1;
-    translateRef.current = { x: 0, y: 0 };
-    isZoomedRef.current = false;
-    applyTransform(1, 0, 0, true);
+  // Reset zoom helper: resets scale=1, panX=0, panY=0
+  const handleResetZoom = useCallback((withTransition = true) => {
+    currentScaleRef.current = 1;
+    currentTranslateRef.current = { x: 0, y: 0 };
+    setIsZoomed(false);
+    applyTransform(1, 0, 0, withTransition);
     onZoomChange?.(false);
   }, [applyTransform, onZoomChange]);
 
   // Reset zoom whenever slide becomes inactive
   useEffect(() => {
     if (!isActive && isLightbox) {
-      handleResetZoom();
+      handleResetZoom(false);
     }
   }, [isActive, isLightbox, handleResetZoom]);
 
@@ -117,9 +123,9 @@ const SlideItem = React.memo<SlideItemProps>(({
   const handleToggleZoom = useCallback((clientX: number, clientY: number) => {
     if (!isLightbox) return;
 
-    if (scaleRef.current > 1.05) {
-      // Zoom out to 1x
-      handleResetZoom();
+    if (currentScaleRef.current > 1.02) {
+      // Return cleanly to 1x
+      handleResetZoom(true);
     } else {
       // Zoom in to 2.5x centered at tap/click coordinates
       const container = containerRef.current;
@@ -128,9 +134,10 @@ const SlideItem = React.memo<SlideItemProps>(({
       const rect = container.getBoundingClientRect();
       const targetScale = 2.5;
 
-      // Distance from container center
-      const offsetX = clientX - (rect.left + rect.width / 2);
-      const offsetY = clientY - (rect.top + rect.height / 2);
+      const cX = rect.left + rect.width / 2;
+      const cY = rect.top + rect.height / 2;
+      const offsetX = clientX - cX;
+      const offsetY = clientY - cY;
 
       const targetX = -offsetX * (targetScale - 1);
       const targetY = -offsetY * (targetScale - 1);
@@ -141,30 +148,21 @@ const SlideItem = React.memo<SlideItemProps>(({
       const clampedX = Math.max(-maxX, Math.min(maxX, targetX));
       const clampedY = Math.max(-maxY, Math.min(maxY, targetY));
 
-      setScale(targetScale);
-      setTranslate({ x: clampedX, y: clampedY });
-      scaleRef.current = targetScale;
-      translateRef.current = { x: clampedX, y: clampedY };
-      isZoomedRef.current = true;
+      currentScaleRef.current = targetScale;
+      currentTranslateRef.current = { x: clampedX, y: clampedY };
+      setIsZoomed(true);
       applyTransform(targetScale, clampedX, clampedY, true);
       onZoomChange?.(true);
     }
   }, [isLightbox, handleResetZoom, applyTransform, onZoomChange]);
 
-  // Attach native non-passive touch listeners for 60fps pinch-to-zoom & pan in Lightbox
+  // Native touch gesture listeners for 60fps pinch-to-zoom & pan in Lightbox
   useEffect(() => {
     if (!isLightbox) return;
     const container = containerRef.current;
     if (!container) return;
 
-    // Prevent pointerdown from bubbling to Embla when zoomed
-    const onPointerDownCapture = (e: PointerEvent) => {
-      if (scaleRef.current > 1.02) {
-        e.stopPropagation();
-      }
-    };
-
-    // Prevent Safari iOS default multi-touch page zoom
+    // Prevent Safari iOS default page zoom
     const onGesture = (e: Event) => {
       e.preventDefault();
     };
@@ -174,40 +172,49 @@ const SlideItem = React.memo<SlideItemProps>(({
       onTouchActivity?.();
 
       if (e.touches.length >= 2) {
-        // PINCH START
-        isPinchingRef.current = true;
-        isPanningRef.current = false;
-        touchMovedRef.current = true;
+        // TWO-FINGER PINCH START
+        gestureStateRef.current = GestureState.PINCH;
+        panHasMovedRef.current = true;
         e.preventDefault();
         e.stopPropagation();
 
         const t0 = e.touches[0];
         const t1 = e.touches[1];
-        pinchStartDistRef.current = Math.max(10, Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY));
-        pinchStartScaleRef.current = scaleRef.current;
-        pinchStartTranslateRef.current = { ...translateRef.current };
-        pinchStartCenterRef.current = {
+        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+
+        pinchStartDistRef.current = Math.max(10, dist);
+        // CRITICAL: Always use CURRENT scale as base zoom! Never reset to 1x!
+        pinchStartScaleRef.current = currentScaleRef.current;
+        pinchStartTranslateRef.current = { ...currentTranslateRef.current };
+
+        const rect = container.getBoundingClientRect();
+        const cX = rect.left + rect.width / 2;
+        const cY = rect.top + rect.height / 2;
+        pinchStartCenterScreenRef.current = {
           x: (t0.clientX + t1.clientX) / 2,
           y: (t0.clientY + t1.clientY) / 2,
         };
-        onZoomChange?.(true);
-        onCancelDrag?.();
-      } else if (e.touches.length === 1) {
-        // SINGLE TOUCH
-        isPinchingRef.current = false;
-        touchStartPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        touchMovedRef.current = false;
+        pinchStartFocalRef.current = {
+          x: pinchStartCenterScreenRef.current.x - cX,
+          y: pinchStartCenterScreenRef.current.y - cY,
+        };
 
-        if (scaleRef.current > 1.02) {
-          // If zoomed: PAN within image, prevent gallery swipe
-          isPanningRef.current = true;
-          e.preventDefault();
-          e.stopPropagation();
-          panStartTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-          panStartTranslateRef.current = { ...translateRef.current };
+        onCancelDrag?.();
+        return;
+      }
+
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        touchStartTimeRef.current = Date.now();
+        panHasMovedRef.current = false;
+        panBoundaryOverflowXRef.current = 0;
+        panStartTouchRef.current = { x: t.clientX, y: t.clientY };
+        panStartTranslateRef.current = { ...currentTranslateRef.current };
+
+        if (currentScaleRef.current > 1.02) {
+          gestureStateRef.current = GestureState.PAN;
         } else {
-          // If 1x: Allow normal horizontal swipe through Embla
-          isPanningRef.current = false;
+          gestureStateRef.current = GestureState.SWIPE;
         }
       }
     };
@@ -216,99 +223,123 @@ const SlideItem = React.memo<SlideItemProps>(({
       if (!isActive) return;
 
       if (e.touches.length >= 2) {
-        // Multi-touch: PINCH IN PROGRESS
-        if (!isPinchingRef.current) {
-          isPinchingRef.current = true;
-          isPanningRef.current = false;
+        // TWO-FINGER PINCH IN PROGRESS
+        if (gestureStateRef.current !== GestureState.PINCH) {
+          gestureStateRef.current = GestureState.PINCH;
+          panHasMovedRef.current = true;
           const t0 = e.touches[0];
           const t1 = e.touches[1];
           pinchStartDistRef.current = Math.max(10, Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY));
-          pinchStartScaleRef.current = scaleRef.current;
-          pinchStartTranslateRef.current = { ...translateRef.current };
-          pinchStartCenterRef.current = {
+          pinchStartScaleRef.current = currentScaleRef.current;
+          pinchStartTranslateRef.current = { ...currentTranslateRef.current };
+          const rect = container.getBoundingClientRect();
+          const cX = rect.left + rect.width / 2;
+          const cY = rect.top + rect.height / 2;
+          pinchStartCenterScreenRef.current = {
             x: (t0.clientX + t1.clientX) / 2,
             y: (t0.clientY + t1.clientY) / 2,
           };
-          onZoomChange?.(true);
+          pinchStartFocalRef.current = {
+            x: pinchStartCenterScreenRef.current.x - cX,
+            y: pinchStartCenterScreenRef.current.y - cY,
+          };
           onCancelDrag?.();
         }
 
         e.preventDefault();
         e.stopPropagation();
-        touchMovedRef.current = true;
+        panHasMovedRef.current = true;
 
         const t0 = e.touches[0];
         const t1 = e.touches[1];
         const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
         if (pinchStartDistRef.current <= 0) return;
 
-        const factor = dist / pinchStartDistRef.current;
-        // Limit zoom scale between 0.85x and 4.2x during active pinch
-        const newScale = Math.min(4.2, Math.max(0.85, pinchStartScaleRef.current * factor));
+        const ratio = dist / pinchStartDistRef.current;
+        const rawScale = pinchStartScaleRef.current * ratio;
+
+        // CRITICAL: Hard limits MIN_ZOOM = 1.0, MAX_ZOOM = 4.0
+        // Never allow shrinking below 1x (no 0.9x, 0.8x, 0.5x). Continuous scaling.
+        const newScale = Math.min(4.0, Math.max(1.0, rawScale));
 
         const currCenter = {
           x: (t0.clientX + t1.clientX) / 2,
           y: (t0.clientY + t1.clientY) / 2,
         };
 
-        const rect = container.getBoundingClientRect();
-        const cX = rect.left + rect.width / 2;
-        const cY = rect.top + rect.height / 2;
-
-        const focalX = pinchStartCenterRef.current.x - cX;
-        const focalY = pinchStartCenterRef.current.y - cY;
+        // Continuous focal point tracking
         const scaleRatio = newScale / Math.max(0.01, pinchStartScaleRef.current);
+        const zoomDx = (pinchStartFocalRef.current.x - pinchStartTranslateRef.current.x) * (1 - scaleRatio);
+        const zoomDy = (pinchStartFocalRef.current.y - pinchStartTranslateRef.current.y) * (1 - scaleRatio);
 
-        const zoomDx = (focalX - pinchStartTranslateRef.current.x) * (1 - scaleRatio);
-        const zoomDy = (focalY - pinchStartTranslateRef.current.y) * (1 - scaleRatio);
-
-        const panDx = currCenter.x - pinchStartCenterRef.current.x;
-        const panDy = currCenter.y - pinchStartCenterRef.current.y;
+        const panDx = currCenter.x - pinchStartCenterScreenRef.current.x;
+        const panDy = currCenter.y - pinchStartCenterScreenRef.current.y;
 
         const rawX = pinchStartTranslateRef.current.x + zoomDx + panDx;
         const rawY = pinchStartTranslateRef.current.y + zoomDy + panDy;
 
+        const rect = container.getBoundingClientRect();
         const maxX = Math.max(0, (rect.width * (newScale - 1)) / 2);
         const maxY = Math.max(0, (rect.height * (newScale - 1)) / 2);
-        const clampedX = Math.max(-maxX * 1.15, Math.min(maxX * 1.15, rawX));
-        const clampedY = Math.max(-maxY * 1.15, Math.min(maxY * 1.15, rawY));
 
-        scaleRef.current = newScale;
-        translateRef.current = { x: clampedX, y: clampedY };
-        applyTransform(newScale, clampedX, clampedY, false); // No CSS transition during active pinch
-      } else if (e.touches.length === 1) {
-        // Single touch
-        const moveDist = Math.hypot(
-          e.touches[0].clientX - touchStartPosRef.current.x,
-          e.touches[0].clientY - touchStartPosRef.current.y
-        );
-        if (moveDist > 8) {
-          touchMovedRef.current = true;
+        const clampedX = Math.max(-maxX, Math.min(maxX, rawX));
+        const clampedY = Math.max(-maxY, Math.min(maxY, rawY));
+
+        currentScaleRef.current = newScale;
+        currentTranslateRef.current = { x: clampedX, y: clampedY };
+        applyTransform(newScale, clampedX, clampedY, false);
+
+        if (newScale > 1.02) {
+          setIsZoomed(true);
+          onZoomChange?.(true);
+        } else {
+          setIsZoomed(false);
+          onZoomChange?.(false);
+        }
+        return;
+      }
+
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        const dx = t.clientX - panStartTouchRef.current.x;
+        const dy = t.clientY - panStartTouchRef.current.y;
+        const moveDist = Math.hypot(dx, dy);
+
+        if (moveDist > 6) {
+          panHasMovedRef.current = true;
         }
 
-        if (isPanningRef.current && scaleRef.current > 1.02) {
-          // PANNING ZOOMED IMAGE
+        // ONE-FINGER PAN AFTER ZOOM
+        if (gestureStateRef.current === GestureState.PAN && currentScaleRef.current > 1.02) {
           e.preventDefault();
           e.stopPropagation();
 
-          const dx = e.touches[0].clientX - panStartTouchRef.current.x;
-          const dy = e.touches[0].clientY - panStartTouchRef.current.y;
+          const rect = container.getBoundingClientRect();
+          const scale = currentScaleRef.current;
+          const maxX = Math.max(0, (rect.width * (scale - 1)) / 2);
+          const maxY = Math.max(0, (rect.height * (scale - 1)) / 2);
 
           const rawX = panStartTranslateRef.current.x + dx;
           const rawY = panStartTranslateRef.current.y + dy;
 
-          const rect = container.getBoundingClientRect();
-          const currentScale = scaleRef.current;
-          const maxX = Math.max(0, (rect.width * (currentScale - 1)) / 2);
-          const maxY = Math.max(0, (rect.height * (currentScale - 1)) / 2);
+          let targetX = rawX;
+          let overflowX = 0;
 
-          const clampedX = Math.max(-maxX, Math.min(maxX, rawX));
+          if (rawX > maxX) {
+            overflowX = rawX - maxX;
+            targetX = maxX + overflowX * 0.3; // natural boundary resistance
+          } else if (rawX < -maxX) {
+            overflowX = rawX - (-maxX);
+            targetX = -maxX + overflowX * 0.3; // natural boundary resistance
+          }
+
           const clampedY = Math.max(-maxY, Math.min(maxY, rawY));
 
-          translateRef.current = { x: clampedX, y: clampedY };
-          applyTransform(currentScale, clampedX, clampedY, false); // No CSS transition during active pan
+          panBoundaryOverflowXRef.current = overflowX;
+          currentTranslateRef.current = { x: targetX, y: clampedY };
+          applyTransform(scale, targetX, clampedY, false);
         }
-        // If scale <= 1.02, we do not preventDefault/stopPropagation: Embla handles gallery swipe!
+        // At 1x (scale <= 1.02): gestureState is SWIPE -> Embla handles carousel drag
       }
     };
 
@@ -316,112 +347,157 @@ const SlideItem = React.memo<SlideItemProps>(({
       if (!isActive) return;
       onTouchActivity?.();
 
-      if (isPinchingRef.current) {
+      // PINCH END
+      if (gestureStateRef.current === GestureState.PINCH) {
         if (e.touches.length === 0) {
-          isPinchingRef.current = false;
+          gestureStateRef.current = GestureState.IDLE;
+          suppressClickUntilRef.current = Date.now() + 400;
+          lastTapTimeRef.current = 0; // Prevent pinch release from triggering double-tap!
+
           e.preventDefault();
           e.stopPropagation();
 
-          if (scaleRef.current <= 1.05) {
-            // Pinched back down to ~1x: snap smoothly back to 1x
-            handleResetZoom();
+          if (currentScaleRef.current <= 1.02) {
+            handleResetZoom(true);
           } else {
-            // Clamped final zoom level between 1x and 4x
+            // Keep current zoom level, clamp boundaries
             const rect = container.getBoundingClientRect();
-            const currentScale = Math.min(4, Math.max(1, scaleRef.current));
-            const maxX = Math.max(0, (rect.width * (currentScale - 1)) / 2);
-            const maxY = Math.max(0, (rect.height * (currentScale - 1)) / 2);
+            const scale = currentScaleRef.current;
+            const maxX = Math.max(0, (rect.width * (scale - 1)) / 2);
+            const maxY = Math.max(0, (rect.height * (scale - 1)) / 2);
 
-            const finalX = Math.max(-maxX, Math.min(maxX, translateRef.current.x));
-            const finalY = Math.max(-maxY, Math.min(maxY, translateRef.current.y));
+            const clampedX = Math.max(-maxX, Math.min(maxX, currentTranslateRef.current.x));
+            const clampedY = Math.max(-maxY, Math.min(maxY, currentTranslateRef.current.y));
 
-            setScale(currentScale);
-            setTranslate({ x: finalX, y: finalY });
-            scaleRef.current = currentScale;
-            translateRef.current = { x: finalX, y: finalY };
-            isZoomedRef.current = currentScale > 1.02;
-            applyTransform(currentScale, finalX, finalY, true); // Smooth snap animation
+            currentTranslateRef.current = { x: clampedX, y: clampedY };
+            applyTransform(scale, clampedX, clampedY, true);
+            setIsZoomed(true);
             onZoomChange?.(true);
           }
           return;
         } else if (e.touches.length === 1) {
           // Transition from pinch to single-finger pan
-          isPinchingRef.current = false;
-          if (scaleRef.current > 1.05) {
-            isPanningRef.current = true;
-            panStartTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            panStartTranslateRef.current = { ...translateRef.current };
-          }
+          gestureStateRef.current = GestureState.PAN;
+          panHasMovedRef.current = true;
+          panBoundaryOverflowXRef.current = 0;
+          const t = e.touches[0];
+          panStartTouchRef.current = { x: t.clientX, y: t.clientY };
+          panStartTranslateRef.current = { ...currentTranslateRef.current };
+          return;
         }
       }
 
-      if (isPanningRef.current && e.touches.length === 0) {
-        isPanningRef.current = false;
-        e.preventDefault();
-        e.stopPropagation();
+      // PAN / SWIPE / TAP END
+      if (e.touches.length === 0) {
+        const wasPan = gestureStateRef.current === GestureState.PAN;
+        gestureStateRef.current = GestureState.IDLE;
 
-        const rect = container.getBoundingClientRect();
-        const currentScale = scaleRef.current;
-        const maxX = Math.max(0, (rect.width * (currentScale - 1)) / 2);
-        const maxY = Math.max(0, (rect.height * (currentScale - 1)) / 2);
+        // Check if this was a clean single tap (not a drag/swipe)
+        const isTap = !panHasMovedRef.current && (Date.now() - touchStartTimeRef.current < 300);
 
-        const finalX = Math.max(-maxX, Math.min(maxX, translateRef.current.x));
-        const finalY = Math.max(-maxY, Math.min(maxY, translateRef.current.y));
+        if (isTap && e.changedTouches.length === 1) {
+          const touch = e.changedTouches[0];
+          const now = Date.now();
+          const timeDiff = now - lastTapTimeRef.current;
+          const distFromLastTap = Math.hypot(
+            touch.clientX - lastTapPosRef.current.x,
+            touch.clientY - lastTapPosRef.current.y
+          );
 
-        setTranslate({ x: finalX, y: finalY });
-        translateRef.current = { x: finalX, y: finalY };
-        applyTransform(currentScale, finalX, finalY, true);
-        return;
-      }
+          if (timeDiff > 40 && timeDiff < 350 && distFromLastTap < 45) {
+            // CRITICAL: DOUBLE-TAP CONFIRMED!
+            // 1x -> 2.5x, or 2.5x -> 1x (resets scale=1, panX=0, panY=0)
+            e.preventDefault();
+            e.stopPropagation();
+            suppressClickUntilRef.current = now + 400;
+            lastTapTimeRef.current = 0;
+            lastTapPosRef.current = { x: 0, y: 0 };
+            handleToggleZoom(touch.clientX, touch.clientY);
+            return;
+          } else {
+            // First tap of potential double-tap
+            lastTapTimeRef.current = now;
+            lastTapPosRef.current = { x: touch.clientX, y: touch.clientY };
+            return;
+          }
+        }
 
-      // DOUBLE-TAP DETECTION:
-      // When a single finger lifts without dragging
-      if (!touchMovedRef.current && e.changedTouches.length === 1) {
-        const touch = e.changedTouches[0];
-        const now = Date.now();
-        const timeDiff = now - lastTapTimeRef.current;
-        const distFromLastTap = Math.hypot(
-          touch.clientX - lastTapPosRef.current.x,
-          touch.clientY - lastTapPosRef.current.y
-        );
+        // Drag/move occurred: reset tap tracking so drag never triggers double-tap
+        lastTapTimeRef.current = 0;
 
-        if (timeDiff > 40 && timeDiff < 320 && distFromLastTap < 40) {
-          // Double-tap confirmed!
+        if (wasPan && currentScaleRef.current > 1.02) {
           e.preventDefault();
           e.stopPropagation();
-          lastTapTimeRef.current = 0;
-          lastTapPosRef.current = { x: 0, y: 0 };
-          handleToggleZoom(touch.clientX, touch.clientY);
-        } else {
-          lastTapTimeRef.current = now;
-          lastTapPosRef.current = { x: touch.clientX, y: touch.clientY };
+          suppressClickUntilRef.current = Date.now() + 300;
+
+          const overflowX = panBoundaryOverflowXRef.current;
+          panBoundaryOverflowXRef.current = 0;
+
+          // Transition to gallery navigation if user dragged strongly past horizontal boundary
+          if (overflowX > 60 && totalImages > 1) {
+            handleResetZoom(false);
+            onPrev?.();
+            return;
+          } else if (overflowX < -60 && totalImages > 1) {
+            handleResetZoom(false);
+            onNext?.();
+            return;
+          }
+
+          // Normal pan: snapback within boundaries
+          const rect = container.getBoundingClientRect();
+          const scale = currentScaleRef.current;
+          const maxX = Math.max(0, (rect.width * (scale - 1)) / 2);
+          const maxY = Math.max(0, (rect.height * (scale - 1)) / 2);
+
+          const clampedX = Math.max(-maxX, Math.min(maxX, currentTranslateRef.current.x));
+          const clampedY = Math.max(-maxY, Math.min(maxY, currentTranslateRef.current.y));
+
+          currentTranslateRef.current = { x: clampedX, y: clampedY };
+          applyTransform(scale, clampedX, clampedY, true);
         }
       }
     };
 
-    container.addEventListener('pointerdown', onPointerDownCapture, { capture: true });
+    const onTouchCancel = () => {
+      gestureStateRef.current = GestureState.IDLE;
+      lastTapTimeRef.current = 0;
+      panBoundaryOverflowXRef.current = 0;
+      if (currentScaleRef.current <= 1.02) {
+        handleResetZoom(false);
+      }
+    };
+
     container.addEventListener('gesturestart', onGesture, { passive: false });
     container.addEventListener('gesturechange', onGesture, { passive: false });
+    container.addEventListener('gestureend', onGesture, { passive: false });
     container.addEventListener('touchstart', onTouchStart, { passive: false });
     container.addEventListener('touchmove', onTouchMove, { passive: false });
     container.addEventListener('touchend', onTouchEnd, { passive: false });
-    container.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', onTouchCancel, { passive: false });
 
     return () => {
-      container.removeEventListener('pointerdown', onPointerDownCapture, { capture: true });
       container.removeEventListener('gesturestart', onGesture);
       container.removeEventListener('gesturechange', onGesture);
+      container.removeEventListener('gestureend', onGesture);
       container.removeEventListener('touchstart', onTouchStart);
       container.removeEventListener('touchmove', onTouchMove);
       container.removeEventListener('touchend', onTouchEnd);
-      container.removeEventListener('touchcancel', onTouchEnd);
+      container.removeEventListener('touchcancel', onTouchCancel);
     };
-  }, [isActive, isLightbox, handleResetZoom, handleToggleZoom, applyTransform, onZoomChange, onCancelDrag, onTouchActivity]);
+  }, [isActive, isLightbox, totalImages, handleResetZoom, handleToggleZoom, applyTransform, onZoomChange, onCancelDrag, onTouchActivity, onPrev, onNext]);
 
   return (
     <div
       ref={containerRef}
-      onClick={scale <= 1.02 ? onSlideClick : undefined}
+      onClick={(e) => {
+        if (Date.now() < suppressClickUntilRef.current || currentScaleRef.current > 1.02) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
+        onSlideClick(e);
+      }}
       onDoubleClick={(e) => {
         if (isLightbox) {
           e.stopPropagation();
@@ -433,8 +509,8 @@ const SlideItem = React.memo<SlideItemProps>(({
         width: '100%',
         height: '100%',
         backgroundColor: '#000000',
-        touchAction: isLightbox ? (scale > 1.02 ? 'none' : 'pan-y') : 'pan-y',
-        cursor: isLightbox ? (scale > 1.02 ? 'grab' : 'default') : 'pointer',
+        touchAction: isLightbox ? (isZoomed ? 'none' : 'pan-y') : 'pan-y',
+        cursor: isLightbox ? (isZoomed ? 'grab' : 'default') : 'pointer',
       }}
     >
       {/* Sleek Skeleton / Blur dark placeholder during initial download */}
@@ -624,6 +700,8 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     const snap = emblaApi.selectedScrollSnap();
     const logical = totalImages > 0 ? (snap % totalImages) : 0;
     if (logical !== activeImageIndex) {
+      isSlideZoomedRef.current = false;
+      setIsSlideZoomed(false);
       onIndexChange(logical);
     }
   }, [emblaApi, totalImages, activeImageIndex, onIndexChange]);
@@ -790,6 +868,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
                 key={`${slide.originalIndex}-${index}`}
                 slide={slide}
                 activeImageIndex={activeImageIndex}
+                totalImages={totalImages}
                 safeTitle={safeTitle}
                 isLightbox={isLightbox}
                 isPreloadAllowed={isPreloadAllowed}
@@ -797,6 +876,8 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
                 onZoomChange={handleZoomChange}
                 onCancelDrag={handleCancelDrag}
                 onTouchActivity={recordTouchActivity}
+                onPrev={handlePrev}
+                onNext={handleNext}
               />
             );
           })}
