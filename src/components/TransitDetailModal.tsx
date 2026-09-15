@@ -51,15 +51,27 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [copied, setCopied] = useState(false);
-  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
-  const [isPhotoGridOpen, setIsPhotoGridOpen] = useState(false);
+
+  // Sub-modal navigation hierarchy (Detail Modal -> Photo Grid -> Lightbox)
+  type SubModalView = 'none' | 'grid' | 'lightbox';
+  const [subView, setSubView] = useState<SubModalView>('none');
+  const [lightboxSource, setLightboxSource] = useState<'detail' | 'grid'>('detail');
+
+  const subViewRef = useRef<SubModalView>('none');
+  subViewRef.current = subView;
+
+  const lightboxSourceRef = useRef<'detail' | 'grid'>('detail');
+  lightboxSourceRef.current = lightboxSource;
+
+  const isLightboxOpen = subView === 'lightbox';
+  const isPhotoGridOpen = subView === 'grid' || (subView === 'lightbox' && lightboxSource === 'grid');
 
   // Reset active image & scroll to top when car changes
   useEffect(() => {
     setActiveImageIndex(0);
     setCopied(false);
-    setIsLightboxOpen(false);
-    setIsPhotoGridOpen(false);
+    setSubView('none');
+    setLightboxSource('detail');
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
     }
@@ -101,16 +113,106 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     }
   }, [imagesList, activeImageIndex]);
 
+  // Sub-modal navigation handlers with pushState
+  const handleOpenPhotoGrid = useCallback(() => {
+    if (!car) return;
+    try {
+      window.history.pushState(
+        { carModal: true, subView: 'grid', carId: car.id },
+        '',
+        window.location.href
+      );
+    } catch (e) {}
+    setSubView('grid');
+  }, [car?.id]);
+
+  const handleSelectPhotoFromGrid = useCallback((index: number) => {
+    if (!car) return;
+    setActiveImageIndex(index);
+    setLightboxSource('grid');
+    try {
+      window.history.pushState(
+        { carModal: true, subView: 'lightbox', from: 'grid', carId: car.id },
+        '',
+        window.location.href
+      );
+    } catch (e) {}
+    setSubView('lightbox');
+  }, [car?.id]);
+
+  const handleOpenLightboxFromDetail = useCallback((index?: number) => {
+    if (!car) return;
+    if (typeof index === 'number') {
+      setActiveImageIndex(index);
+    }
+    setLightboxSource('detail');
+    try {
+      window.history.pushState(
+        { carModal: true, subView: 'lightbox', from: 'detail', carId: car.id },
+        '',
+        window.location.href
+      );
+    } catch (e) {}
+    setSubView('lightbox');
+  }, [car?.id]);
+
+  const handleCloseLightbox = useCallback(() => {
+    if (window.history.state?.subView === 'lightbox') {
+      window.history.back();
+    } else {
+      if (lightboxSourceRef.current === 'grid') {
+        setSubView('grid');
+      } else {
+        setSubView('none');
+      }
+    }
+  }, []);
+
+  const handleClosePhotoGrid = useCallback(() => {
+    if (window.history.state?.subView === 'grid') {
+      window.history.back();
+    } else {
+      setSubView('none');
+    }
+  }, []);
+
+  // Sync sub-modal view with browser history (popstate)
+  useEffect(() => {
+    if (!car) return;
+
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state;
+      const targetSubView = state?.subView as SubModalView | undefined;
+
+      if (targetSubView === 'lightbox') {
+        setSubView('lightbox');
+        if (state?.from === 'grid') {
+          setLightboxSource('grid');
+        } else {
+          setLightboxSource('detail');
+        }
+      } else if (targetSubView === 'grid') {
+        setSubView('grid');
+      } else {
+        // subView is 'none' or not in state -> back to main car detail view
+        setSubView('none');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [car?.id]);
+
   // Keyboard navigation (Escape to close lightbox, photo grid or modal; Arrow keys handled by active slider)
   useEffect(() => {
     if (!car) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (isLightboxOpen) {
-          setIsLightboxOpen(false);
-        } else if (isPhotoGridOpen) {
-          setIsPhotoGridOpen(false);
+        if (subViewRef.current === 'lightbox') {
+          handleCloseLightbox();
+        } else if (subViewRef.current === 'grid') {
+          handleClosePhotoGrid();
         } else {
           onClose();
         }
@@ -119,14 +221,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [car, isLightboxOpen, isPhotoGridOpen, onClose]);
-
-  // Photo Grid seçimi: Şəklin indeksini təyin et, qridi bağla və lightbox-u aç
-  const handleSelectPhotoFromGrid = useCallback((index: number) => {
-    setActiveImageIndex(index);
-    setIsPhotoGridOpen(false);
-    setIsLightboxOpen(true);
-  }, []);
+  }, [car?.id, handleCloseLightbox, handleClosePhotoGrid, onClose]);
 
   // Check if car object is valid
   if (!car) return null;
@@ -343,13 +438,10 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
                   onIndexChange={setActiveImageIndex}
                   safeTitle={safeTitle}
                   onImageClick={(clickedIndex) => {
-                    if (typeof clickedIndex === 'number') {
-                      setActiveImageIndex(clickedIndex);
-                    }
-                    setIsLightboxOpen(true);
+                    handleOpenLightboxFromDetail(clickedIndex);
                   }}
-                  onOpenPhotoGrid={() => setIsPhotoGridOpen(true)}
-                  disabledKeyNav={isLightboxOpen || isPhotoGridOpen}
+                  onOpenPhotoGrid={handleOpenPhotoGrid}
+                  disabledKeyNav={isLightboxOpen || subView === 'grid'}
                   className="w-full aspect-[4/3] md:aspect-auto md:h-[500px] flex items-center justify-center bg-black"
                 />
               </div>
@@ -426,16 +518,17 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
       {/* Mobile-only "Bütün şəkillər" Grid Gallery (Turbo.az Style) */}
       <DetailPhotoGrid
         isOpen={isPhotoGridOpen}
-        onClose={() => setIsPhotoGridOpen(false)}
+        onClose={handleClosePhotoGrid}
         imagesList={imagesList}
         title={vehicleMainTitle || safeTitle}
         onSelectPhoto={handleSelectPhotoFromGrid}
+        disabledEscape={isLightboxOpen}
       />
 
       {/* Fullscreen Photo Lightbox (Turbo.az Style - Desktop & Mobile) */}
       <DetailLightbox
         isOpen={isLightboxOpen}
-        onClose={() => setIsLightboxOpen(false)}
+        onClose={handleCloseLightbox}
         imagesList={imagesList}
         activeImageIndex={activeImageIndex}
         setActiveImageIndex={setActiveImageIndex}
@@ -444,6 +537,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
         lightboxCarDetails={lightboxCarDetails}
         whatsappUrl={whatsappUrl}
         isFavorite={isFavorite}
+        isFromGrid={lightboxSource === 'grid'}
         onToggleFavorite={() => {
           if (car?.id && onToggleFavorite) {
             onToggleFavorite(car.id);

@@ -9,6 +9,7 @@ interface DetailPhotoGridProps {
   imagesList: string[];
   title: string;
   onSelectPhoto: (index: number) => void;
+  disabledEscape?: boolean;
 }
 
 export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
@@ -17,10 +18,11 @@ export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
   imagesList,
   title,
   onSelectPhoto,
+  disabledEscape = false,
 }) => {
   // Keyboard accessibility: Escape key closes the grid
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || disabledEscape) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -31,7 +33,7 @@ export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, disabledEscape, onClose]);
 
   return (
     <AnimatePresence>
@@ -41,7 +43,9 @@ export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 30 }}
           transition={{ duration: 0.22, ease: 'easeOut' }}
-          className="fixed inset-0 z-[65] flex flex-col bg-slate-100 select-none overflow-hidden"
+          className={`fixed inset-0 z-[65] flex flex-col bg-slate-100 select-none overflow-hidden ${
+            disabledEscape ? 'pointer-events-none' : ''
+          }`}
           role="dialog"
           aria-modal="true"
           aria-label={`${title} - Bütün şəkillər`}

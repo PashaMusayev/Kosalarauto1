@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { X, Heart, Phone } from 'lucide-react';
+import { X, Heart, Phone, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PHONE_NUMBER } from '../../data/transits';
 import { getValidImageUrl } from '../../utils/imageFallback';
@@ -17,6 +17,7 @@ interface DetailLightboxProps {
   whatsappUrl: string;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
+  isFromGrid?: boolean;
 }
 
 export const DetailLightbox: React.FC<DetailLightboxProps> = ({
@@ -31,6 +32,7 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
   whatsappUrl,
   isFavorite = false,
   onToggleFavorite,
+  isFromGrid = false,
 }) => {
   const thumbnailRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const thumbnailsContainerRef = useRef<HTMLDivElement>(null);
@@ -88,15 +90,20 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
             className="flex md:hidden w-full bg-black px-4 pt-3.5 pb-3 items-center justify-between z-30 shrink-0 select-none border-b border-white/10"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Sol yuxarı künc: Təmiz "✕" (bağla) işarəsi */}
+            {/* Sol yuxarı künc: Təmiz "✕" (bağla) və ya geri ox işarəsi */}
             <button
               type="button"
+              id="btn-lightbox-back"
               onClick={onClose}
               className="w-10 h-10 flex items-center justify-center text-white hover:opacity-75 active:scale-95 transition-all cursor-pointer"
-              title="Bağla (Esc)"
-              aria-label="Bağla"
+              title={isFromGrid ? "Geri" : "Bağla (Esc)"}
+              aria-label={isFromGrid ? "Geri" : "Bağla"}
             >
-              <X className="w-6 h-6 text-white stroke-[2.2]" />
+              {isFromGrid ? (
+                <ArrowLeft className="w-6 h-6 text-white stroke-[2.2]" />
+              ) : (
+                <X className="w-6 h-6 text-white stroke-[2.2]" />
+              )}
             </button>
 
             {/* Üst mərkəz: Yığcam fraksiya (Məs: 15 / 16) */}
@@ -176,12 +183,27 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
                 />
               </button>
 
+              {isFromGrid && (
+                <button
+                  type="button"
+                  id="btn-lightbox-desktop-back"
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold transition-all cursor-pointer select-none"
+                  title="Qalereyaya qayıt"
+                  aria-label="Qalereyaya qayıt"
+                >
+                  <ArrowLeft className="w-4 h-4 text-white" />
+                  <span>Qalereya</span>
+                </button>
+              )}
+
               <button
                 type="button"
+                id="btn-lightbox-desktop-close"
                 onClick={onClose}
                 className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center text-white transition-all cursor-pointer"
-                title="Bağla (Esc)"
-                aria-label="Bağla"
+                title={isFromGrid ? "Qalereyaya qayıt (Esc)" : "Bağla (Esc)"}
+                aria-label={isFromGrid ? "Geri" : "Bağla"}
               >
                 <X className="w-6 h-6 text-white stroke-[2.2]" />
               </button>
