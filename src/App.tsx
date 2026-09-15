@@ -228,6 +228,13 @@ export default function App() {
         const matchedCar = transits.find(c => c.id.toLowerCase() === carId.toLowerCase());
         if (matchedCar) {
           setSelectedCar(matchedCar);
+          try {
+            window.history.replaceState(
+              { modal: 'car-details', carModal: true, carId: matchedCar.id },
+              '',
+              window.location.href
+            );
+          } catch (e) {}
         }
       }
 
@@ -238,7 +245,7 @@ export default function App() {
       }
     } catch (e) {}
 
-    const handlePopState = () => {
+    const handlePopState = (event: PopStateEvent) => {
       const p = normalizePath(window.location.pathname);
       const pathChanged = p !== currentPathRef.current;
       setCurrentPath(p);
@@ -249,18 +256,26 @@ export default function App() {
         setAdminOpen(false);
       }
 
-      // Read the car query param from the URL on every popstate event
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const carId = params.get('car');
+      // Synchronize modal state strictly with history
+      const state = event.state;
+      const modal = state?.modal;
+      const params = new URLSearchParams(window.location.search);
+      const carId = state?.carId || params.get('car');
+
+      if (modal === 'lightbox' || modal === 'photo-grid' || modal === 'car-details') {
+        // Modal or sub-modal layer is active -> ensure Detail Modal remains mounted underneath
         if (carId) {
           const list = transitsRef.current.length > 0 ? transitsRef.current : transits;
           const matchedCar = list.find(c => c.id.toLowerCase() === carId.toLowerCase());
           setSelectedCar(matchedCar || null);
-        } else {
-          setSelectedCar(null);
         }
-      } catch (e) {
+      } else if (state?.carModal && carId) {
+        // Backward compatibility
+        const list = transitsRef.current.length > 0 ? transitsRef.current : transits;
+        const matchedCar = list.find(c => c.id.toLowerCase() === carId.toLowerCase());
+        setSelectedCar(matchedCar || null);
+      } else {
+        // If current history state is null/root and user triggers popstate (BACK), close Detail Modal
         setSelectedCar(null);
       }
 
@@ -338,14 +353,24 @@ export default function App() {
     try {
       const url = new URL(window.location.href);
       url.searchParams.set('car', car.id);
-      window.history.pushState({ carModal: true }, '', url.toString());
+      window.history.pushState(
+        { modal: 'car-details', carModal: true, carId: car.id },
+        '',
+        url.toString()
+      );
     } catch (e) {}
   }, []);
 
   const handleCloseDetail = useCallback(() => {
     try {
       // Pop the history entry pushed when detail was opened, which dispatches popstate
-      if (window.history.state?.carModal || window.history.length > 1) {
+      if (
+        window.history.state?.modal === 'car-details' || 
+        window.history.state?.modal === 'photo-grid' || 
+        window.history.state?.modal === 'lightbox' || 
+        window.history.state?.carModal || 
+        window.history.length > 1
+      ) {
         window.history.back();
       } else {
         // Fallback for direct link in a fresh tab with no prior history

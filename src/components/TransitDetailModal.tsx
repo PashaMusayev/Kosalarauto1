@@ -117,10 +117,12 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   const handleOpenPhotoGrid = useCallback(() => {
     if (!car) return;
     try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('car', car.id);
       window.history.pushState(
-        { carModal: true, subView: 'grid', carId: car.id },
+        { modal: 'photo-grid', carModal: true, subView: 'grid', carId: car.id },
         '',
-        window.location.href
+        url.toString()
       );
     } catch (e) {}
     setSubView('grid');
@@ -131,10 +133,12 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     setActiveImageIndex(index);
     setLightboxSource('grid');
     try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('car', car.id);
       window.history.pushState(
-        { carModal: true, subView: 'lightbox', from: 'grid', carId: car.id },
+        { modal: 'lightbox', carModal: true, subView: 'lightbox', from: 'grid', carId: car.id },
         '',
-        window.location.href
+        url.toString()
       );
     } catch (e) {}
     setSubView('lightbox');
@@ -147,17 +151,19 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     }
     setLightboxSource('detail');
     try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('car', car.id);
       window.history.pushState(
-        { carModal: true, subView: 'lightbox', from: 'detail', carId: car.id },
+        { modal: 'lightbox', carModal: true, subView: 'lightbox', from: 'detail', carId: car.id },
         '',
-        window.location.href
+        url.toString()
       );
     } catch (e) {}
     setSubView('lightbox');
   }, [car?.id]);
 
   const handleCloseLightbox = useCallback(() => {
-    if (window.history.state?.subView === 'lightbox') {
+    if (window.history.state?.modal === 'lightbox' || window.history.state?.subView === 'lightbox') {
       window.history.back();
     } else {
       if (lightboxSourceRef.current === 'grid') {
@@ -169,7 +175,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   }, []);
 
   const handleClosePhotoGrid = useCallback(() => {
-    if (window.history.state?.subView === 'grid') {
+    if (window.history.state?.modal === 'photo-grid' || window.history.state?.subView === 'grid') {
       window.history.back();
     } else {
       setSubView('none');
@@ -182,19 +188,26 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state;
+      const modal = state?.modal;
       const targetSubView = state?.subView as SubModalView | undefined;
 
-      if (targetSubView === 'lightbox') {
+      if (modal === 'lightbox' || targetSubView === 'lightbox') {
         setSubView('lightbox');
         if (state?.from === 'grid') {
           setLightboxSource('grid');
         } else {
           setLightboxSource('detail');
         }
-      } else if (targetSubView === 'grid') {
+      } else if (modal === 'photo-grid' || targetSubView === 'grid') {
+        // If current history state is 'photo-grid' and user triggers popstate (BACK),
+        // close Lightbox ONLY (if open) and ensure Detail Modal remains mounted underneath.
         setSubView('grid');
+      } else if (modal === 'car-details' || state?.carModal) {
+        // If current history state is 'car-details' and user triggers popstate (BACK),
+        // close Photo Grid and show Detail Modal.
+        setSubView('none');
       } else {
-        // subView is 'none' or not in state -> back to main car detail view
+        // If current history state is null/root, close sub-modals (App.tsx closes Detail Modal)
         setSubView('none');
       }
     };
@@ -522,7 +535,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
         imagesList={imagesList}
         title={vehicleMainTitle || safeTitle}
         onSelectPhoto={handleSelectPhotoFromGrid}
-        disabledEscape={isLightboxOpen}
+        disabledEscape={true}
       />
 
       {/* Fullscreen Photo Lightbox (Turbo.az Style - Desktop & Mobile) */}
