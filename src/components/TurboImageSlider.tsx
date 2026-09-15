@@ -54,6 +54,9 @@ const SlideItem = React.memo<SlideItemProps>(({
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth >= 768 : false;
+  });
 
   const isActive = slide.originalIndex === activeImageIndex;
 
@@ -94,6 +97,13 @@ const SlideItem = React.memo<SlideItemProps>(({
 
   // Apply transform directly to DOM for 60fps responsiveness
   const applyTransform = useCallback((s: number, x: number, y: number, withTransition: boolean) => {
+    // Strictly isolate & disable desktop Lightbox zoom transforms (md: and above)
+    if (isLightbox && typeof window !== 'undefined' && window.innerWidth >= 768) {
+      s = 1;
+      x = 0;
+      y = 0;
+    }
+
     currentScaleRef.current = s;
     currentTranslateRef.current = { x, y };
 
@@ -102,7 +112,7 @@ const SlideItem = React.memo<SlideItemProps>(({
       ? 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)'
       : 'none';
     wrapperRef.current.style.transform = `translate3d(${x}px, ${y}px, 0px) scale(${s})`;
-  }, []);
+  }, [isLightbox]);
 
   // Reset zoom helper: resets scale=1, panX=0, panY=0
   const handleResetZoom = useCallback((withTransition = true) => {
@@ -113,6 +123,19 @@ const SlideItem = React.memo<SlideItemProps>(({
     onZoomChange?.(false);
   }, [applyTransform, onZoomChange]);
 
+  // Track responsive viewport size and reset zoom if transitioning to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      const desktop = window.innerWidth >= 768;
+      setIsDesktop(desktop);
+      if (desktop && isLightbox && currentScaleRef.current > 1) {
+        handleResetZoom(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isLightbox, handleResetZoom]);
+
   // Reset zoom whenever slide becomes inactive
   useEffect(() => {
     if (!isActive && isLightbox) {
@@ -120,9 +143,13 @@ const SlideItem = React.memo<SlideItemProps>(({
     }
   }, [isActive, isLightbox, handleResetZoom]);
 
-  // Toggle zoom (for double-tap on mobile / double-click on desktop)
+  // Toggle zoom (for double-tap on mobile; strictly disabled on desktop md: and above)
   const handleToggleZoom = useCallback((clientX: number, clientY: number) => {
     if (!isLightbox) return;
+    // Strictly disable zoom on desktop (md: breakpoint >= 768px)
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      return;
+    }
 
     if (currentScaleRef.current > 1.02) {
       // Return cleanly to 1x
@@ -170,6 +197,8 @@ const SlideItem = React.memo<SlideItemProps>(({
 
     const onTouchStart = (e: TouchEvent) => {
       if (!isActive) return;
+      // On desktop (md: breakpoint >= 768px), disable touch pinch/zoom gestures
+      if (window.innerWidth >= 768) return;
       onTouchActivity?.();
 
       if (e.touches.length >= 2) {
@@ -222,6 +251,8 @@ const SlideItem = React.memo<SlideItemProps>(({
 
     const onTouchMove = (e: TouchEvent) => {
       if (!isActive) return;
+      // On desktop (md: breakpoint >= 768px), disable touch pinch/zoom gestures
+      if (window.innerWidth >= 768) return;
 
       if (e.touches.length >= 2) {
         // TWO-FINGER PINCH IN PROGRESS
@@ -469,6 +500,15 @@ const SlideItem = React.memo<SlideItemProps>(({
       }
     };
 
+    // Prevent desktop trackpad pinch-to-zoom or mouse wheel zoom inside Lightbox
+    const onWheel = (e: WheelEvent) => {
+      if (isLightbox && window.innerWidth >= 768) {
+        if (e.ctrlKey) {
+          e.preventDefault();
+        }
+      }
+    };
+
     container.addEventListener('gesturestart', onGesture, { passive: false });
     container.addEventListener('gesturechange', onGesture, { passive: false });
     container.addEventListener('gestureend', onGesture, { passive: false });
@@ -476,6 +516,7 @@ const SlideItem = React.memo<SlideItemProps>(({
     container.addEventListener('touchmove', onTouchMove, { passive: false });
     container.addEventListener('touchend', onTouchEnd, { passive: false });
     container.addEventListener('touchcancel', onTouchCancel, { passive: false });
+    container.addEventListener('wheel', onWheel, { passive: false });
 
     return () => {
       container.removeEventListener('gesturestart', onGesture);
@@ -485,6 +526,7 @@ const SlideItem = React.memo<SlideItemProps>(({
       container.removeEventListener('touchmove', onTouchMove);
       container.removeEventListener('touchend', onTouchEnd);
       container.removeEventListener('touchcancel', onTouchCancel);
+      container.removeEventListener('wheel', onWheel);
     };
   }, [isActive, isLightbox, totalImages, handleResetZoom, handleToggleZoom, applyTransform, onZoomChange, onCancelDrag, onTouchActivity, onPrev, onNext]);
 
@@ -502,6 +544,10 @@ const SlideItem = React.memo<SlideItemProps>(({
       onDoubleClick={(e) => {
         if (isLightbox) {
           e.stopPropagation();
+          // Strictly disable double-click zoom on desktop (md: breakpoint >= 768px)
+          if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+            return;
+          }
           handleToggleZoom(e.clientX, e.clientY);
         }
       }}
@@ -510,8 +556,16 @@ const SlideItem = React.memo<SlideItemProps>(({
         width: '100%',
         height: '100%',
         backgroundColor: '#000000',
-        touchAction: isLightbox ? (isZoomed ? 'none' : 'pan-y') : 'pan-y',
-        cursor: isLightbox ? (isZoomed ? 'grab' : 'default') : 'pointer',
+        touchAction: isLightbox ? (isDesktop ? 'pan-y' : (isZoomed ? 'none' : 'pan-y')) : 'pan-y',
+        cursor: isLightbox
+          ? isDesktop
+            ? totalImages > 1
+              ? 'pointer'
+              : 'default'
+            : isZoomed
+              ? 'grab'
+              : 'default'
+          : 'pointer',
       }}
     >
       {/* Sleek Skeleton / Blur dark placeholder during initial download */}
@@ -856,7 +910,11 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     >
       {/* Embla Viewport */}
       <div 
-        className={`overflow-hidden w-full h-full bg-black ${isLightbox ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`} 
+        className={`overflow-hidden w-full h-full bg-black ${
+          isLightbox 
+            ? totalImages > 1 ? 'cursor-pointer' : 'cursor-default' 
+            : 'cursor-grab active:cursor-grabbing'
+        }`} 
         ref={emblaRef}
       >
         <div 
