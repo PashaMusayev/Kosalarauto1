@@ -117,12 +117,10 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   const handleOpenPhotoGrid = useCallback(() => {
     if (!car) return;
     try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('car', car.id);
       window.history.pushState(
-        { modal: 'photo-grid', carModal: true, subView: 'grid', carId: car.id },
+        { carModal: true, subView: 'grid', carId: car.id },
         '',
-        url.toString()
+        window.location.href
       );
     } catch (e) {}
     setSubView('grid');
@@ -133,12 +131,10 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     setActiveImageIndex(index);
     setLightboxSource('grid');
     try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('car', car.id);
       window.history.pushState(
-        { modal: 'lightbox', carModal: true, subView: 'lightbox', from: 'grid', carId: car.id },
+        { carModal: true, subView: 'lightbox', from: 'grid', carId: car.id },
         '',
-        url.toString()
+        window.location.href
       );
     } catch (e) {}
     setSubView('lightbox');
@@ -151,19 +147,17 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     }
     setLightboxSource('detail');
     try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('car', car.id);
       window.history.pushState(
-        { modal: 'lightbox', carModal: true, subView: 'lightbox', from: 'detail', carId: car.id },
+        { carModal: true, subView: 'lightbox', from: 'detail', carId: car.id },
         '',
-        url.toString()
+        window.location.href
       );
     } catch (e) {}
     setSubView('lightbox');
   }, [car?.id]);
 
   const handleCloseLightbox = useCallback(() => {
-    if (window.history.state?.modal === 'lightbox' || window.history.state?.subView === 'lightbox') {
+    if (window.history.state?.subView === 'lightbox') {
       window.history.back();
     } else {
       if (lightboxSourceRef.current === 'grid') {
@@ -175,7 +169,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   }, []);
 
   const handleClosePhotoGrid = useCallback(() => {
-    if (window.history.state?.modal === 'photo-grid' || window.history.state?.subView === 'grid') {
+    if (window.history.state?.subView === 'grid') {
       window.history.back();
     } else {
       setSubView('none');
@@ -188,33 +182,26 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state;
-      const modal = state?.modal;
       const targetSubView = state?.subView as SubModalView | undefined;
 
-      if (modal === 'lightbox' || targetSubView === 'lightbox') {
+      if (targetSubView === 'lightbox') {
         setSubView('lightbox');
         if (state?.from === 'grid') {
           setLightboxSource('grid');
         } else {
           setLightboxSource('detail');
         }
-      } else if (modal === 'photo-grid' || targetSubView === 'grid') {
-        // If current history state is 'photo-grid' and user triggers popstate (BACK),
-        // close Lightbox ONLY (if open) and ensure Detail Modal remains mounted underneath.
+      } else if (targetSubView === 'grid') {
         setSubView('grid');
-      } else if (modal === 'car-details' || state?.carModal) {
-        // If current history state is 'car-details' and user triggers popstate (BACK),
-        // close Photo Grid and show Detail Modal.
-        setSubView('none');
       } else {
-        // If current history state is null/root, close sub-modals (App.tsx closes Detail Modal)
+        // subView is 'none' or not in state -> back to main car detail view
         setSubView('none');
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [car?.id]);
+  }, [car]);
 
   // Keyboard navigation (Escape to close lightbox, photo grid or modal; Arrow keys handled by active slider)
   useEffect(() => {
@@ -535,7 +522,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
         imagesList={imagesList}
         title={vehicleMainTitle || safeTitle}
         onSelectPhoto={handleSelectPhotoFromGrid}
-        disabledEscape={true}
+        disabledEscape={isLightboxOpen}
       />
 
       {/* Fullscreen Photo Lightbox (Turbo.az Style - Desktop & Mobile) */}
