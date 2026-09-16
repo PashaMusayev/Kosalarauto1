@@ -342,6 +342,7 @@ export default function App() {
   }, []);
 
   const detailOpenedFromCatalogRef = useRef<boolean>(false);
+  const pendingSectionRef = useRef<string | null>(null);
 
   // Sync modal state with URL - opening from catalog or favorites drawer
   const handleOpenDetail = useCallback((car: TransitCar) => {
@@ -459,6 +460,15 @@ export default function App() {
     }
   }, []);
 
+  // Scroll to target section when transitioning back to homepage from another route
+  useEffect(() => {
+    if (currentPath === '/' && pendingSectionRef.current) {
+      const targetSection = pendingSectionRef.current;
+      pendingSectionRef.current = null;
+      scrollToSection(targetSection);
+    }
+  }, [currentPath, scrollToSection]);
+
   // Handle site navigation between routes and catalog sections
   const handleNavigate = useCallback((target: string) => {
     if (target === '/haqqimizda' || target === 'haqqimizda') {
@@ -487,10 +497,12 @@ export default function App() {
         try {
           window.history.pushState({}, '', '/');
         } catch (e) {}
+        pendingSectionRef.current = 'movcud-avtomobiller';
         setCurrentPath('/');
         setAdminOpen(false);
+      } else {
+        scrollToSection('movcud-avtomobiller');
       }
-      scrollToSection('katalog');
     } else {
       scrollToSection(target);
     }
