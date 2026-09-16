@@ -60,10 +60,10 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header id="main-header" className={`sticky top-0 z-40 transition-all duration-300 ${
+    <header id="main-header" className={`sticky top-0 z-40 transition-[background-color,box-shadow,backdrop-filter] duration-300 py-3.5 ${
       isScrolled 
-        ? 'bg-white/95 backdrop-blur-md text-slate-900 shadow-sm py-3' 
-        : 'bg-white text-slate-900 py-3.5'
+        ? 'bg-white/95 backdrop-blur-md text-slate-900 shadow-sm' 
+        : 'bg-white text-slate-900'
     }`}>
       {/* Top micro bar for quick trust info */}
       <div className="hidden lg:block bg-slate-50/80 text-slate-600 text-xs py-1.5 mb-2">
@@ -220,7 +220,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="sm:hidden bg-white px-4 pt-3 pb-6 mt-3 space-y-3 shadow-xl rounded-b-2xl animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="sm:hidden absolute top-full left-0 right-0 bg-white px-4 pt-3 pb-6 space-y-3 shadow-xl rounded-b-2xl border-b border-slate-100 animate-in fade-in slide-in-from-top-2 duration-200">
           <nav className="flex flex-col space-y-2">
             <button 
               onClick={() => handleNav('/')} 
