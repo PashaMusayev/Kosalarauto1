@@ -66,7 +66,13 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     setLightboxSource('detail');
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
+      scrollContainerRef.current.scrollTop = 0;
     }
+    requestAnimationFrame(() => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+    });
   }, [car?.id]);
 
   // Safe Image Array Extraction
@@ -420,12 +426,22 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
   const handleSelectSimilarCar = (simCar: TransitCar) => {
     setActiveImageIndex(0);
+    setIsPhotoGridOpen(false);
+    setIsLightboxOpen(false);
+    setLightboxSource('detail');
+
     if (onSelectCar) {
       onSelectCar(simCar);
     }
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
+      scrollContainerRef.current.scrollTop = 0;
     }
+    requestAnimationFrame(() => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+    });
   };
 
   return (

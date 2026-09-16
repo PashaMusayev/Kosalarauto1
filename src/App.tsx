@@ -259,9 +259,11 @@ export default function App() {
           setSelectedCar(matchedCar || null);
         } else {
           setSelectedCar(null);
+          detailOpenedFromCatalogRef.current = false;
         }
       } catch (e) {
         setSelectedCar(null);
+        detailOpenedFromCatalogRef.current = false;
       }
 
       if (pathChanged) {
@@ -332,8 +334,11 @@ export default function App() {
     setAdminOpen(false);
   }, []);
 
-  // Sync modal state with URL
+  const detailOpenedFromCatalogRef = useRef<boolean>(false);
+
+  // Sync modal state with URL - opening from catalog or favorites drawer
   const handleOpenDetail = useCallback((car: TransitCar) => {
+    detailOpenedFromCatalogRef.current = true;
     setSelectedCar(car);
     try {
       const url = new URL(window.location.href);
@@ -344,13 +349,28 @@ export default function App() {
     } catch (e) {}
   }, []);
 
+  // Switch to a similar car from within the open Detail Modal (REPLACES history state to prevent stack pollution)
+  const handleSelectSimilarCar = useCallback((car: TransitCar) => {
+    setSelectedCar(car);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('car', car.id);
+      url.searchParams.delete('overlay');
+      url.searchParams.delete('photo');
+      // Use replaceState so that navigating through similar cars does NOT push new entries into the browser history stack
+      window.history.replaceState({ carModal: detailOpenedFromCatalogRef.current }, '', url.toString());
+    } catch (e) {}
+  }, []);
+
   const handleCloseDetail = useCallback(() => {
     try {
       // Pop the history entry pushed when detail was opened, which dispatches popstate
-      if (window.history.state?.carModal || window.history.length > 1) {
+      if (detailOpenedFromCatalogRef.current || window.history.state?.carModal || window.history.length > 1) {
+        detailOpenedFromCatalogRef.current = false;
         window.history.back();
       } else {
         // Fallback for direct link in a fresh tab with no prior history
+        detailOpenedFromCatalogRef.current = false;
         setSelectedCar(null);
         const url = new URL(window.location.href);
         url.searchParams.delete('car');
@@ -359,6 +379,7 @@ export default function App() {
         window.history.replaceState({}, '', url.toString());
       }
     } catch (e) {
+      detailOpenedFromCatalogRef.current = false;
       window.history.back();
     }
   }, []);
@@ -679,7 +700,7 @@ export default function App() {
         isFavorite={selectedCar ? favorites.includes(selectedCar.id) : false}
         onToggleFavorite={handleToggleFavorite}
         allCars={transits}
-        onSelectCar={handleOpenDetail}
+        onSelectCar={handleSelectSimilarCar}
         favorites={favorites}
       />
 
