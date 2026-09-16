@@ -489,16 +489,8 @@ export default function App() {
         } catch (e) {}
         setCurrentPath('/');
         setAdminOpen(false);
-        setTimeout(() => {
-          requestAnimationFrame(() => {
-            scrollToSection('katalog');
-          });
-        }, 60);
-      } else {
-        requestAnimationFrame(() => {
-          scrollToSection('katalog');
-        });
       }
+      scrollToSection('katalog');
     } else {
       scrollToSection(target);
     }

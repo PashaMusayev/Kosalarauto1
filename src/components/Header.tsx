@@ -34,7 +34,9 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const handleNav = (target: string) => {
+    // Immediately close mobile menu so layout collapses synchronously before navigation/scroll
     setMobileMenuOpen(false);
+
     if (target === '/haqqimizda' || target === 'haqqimizda') {
       try {
         window.history.pushState({}, '', '/haqqimizda');
@@ -58,7 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className={`sticky top-0 z-40 transition-all duration-300 ${
+    <header id="main-header" className={`sticky top-0 z-40 transition-all duration-300 ${
       isScrolled 
         ? 'bg-white/95 backdrop-blur-md text-slate-900 shadow-sm py-3' 
         : 'bg-white text-slate-900 py-3.5'
