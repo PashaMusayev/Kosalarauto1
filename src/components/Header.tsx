@@ -34,40 +34,31 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const handleNav = (target: string) => {
-    // 1. Immediately close mobile menu
     setMobileMenuOpen(false);
-    // 2. Restore body overflow to avoid any scroll locking
-    document.body.style.overflow = '';
-
-    // 3. Defer navigation to allow mobile drawer state to unmount / unlock DOM
-    requestAnimationFrame(() => {
-      if (target === '/haqqimizda' || target === 'haqqimizda') {
-        try {
-          window.history.pushState({}, '', '/haqqimizda');
-        } catch (e) {}
-        onNavigate('/haqqimizda');
-      } else if (target === '/elaqe' || target === 'elaqe') {
-        try {
-          window.history.pushState({}, '', '/elaqe');
-        } catch (e) {}
-        onNavigate('/elaqe');
-      } else if (target === '/' || target === 'hero' || target === 'home') {
-        try {
-          window.history.pushState({}, '', '/');
-        } catch (e) {}
-        onNavigate('/');
-      } else if (target === 'movcud-avtomobiller' || target === 'katalog') {
-        onNavigate('movcud-avtomobiller');
-      } else {
-        onNavigate(target);
-      }
-    });
+    if (target === '/haqqimizda' || target === 'haqqimizda') {
+      try {
+        window.history.pushState({}, '', '/haqqimizda');
+      } catch (e) {}
+      onNavigate('/haqqimizda');
+    } else if (target === '/elaqe' || target === 'elaqe') {
+      try {
+        window.history.pushState({}, '', '/elaqe');
+      } catch (e) {}
+      onNavigate('/elaqe');
+    } else if (target === '/' || target === 'hero' || target === 'home') {
+      try {
+        window.history.pushState({}, '', '/');
+      } catch (e) {}
+      onNavigate('/');
+    } else if (target === 'movcud-avtomobiller') {
+      onNavigate('movcud-avtomobiller');
+    } else {
+      onNavigate(target);
+    }
   };
 
   return (
-    <header 
-      id="main-header"
-      className={`sticky top-0 z-40 transition-all duration-300 ${
+    <header className={`sticky top-0 z-40 transition-all duration-300 ${
       isScrolled 
         ? 'bg-white/95 backdrop-blur-md text-slate-900 shadow-sm py-3' 
         : 'bg-white text-slate-900 py-3.5'
