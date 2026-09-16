@@ -796,10 +796,22 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   const handleApply = useCallback(() => {
     onFilterChange(localFilters);
     setIsModalOpen(false);
-    const catalogElem = document.getElementById('movcud-avtomobiller');
-    if (catalogElem) {
-      catalogElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    requestAnimationFrame(() => {
+      const catalogElem = document.getElementById('movcud-avtomobiller');
+      if (catalogElem) {
+        const headerElem = document.getElementById('main-header') || document.querySelector('header');
+        const measuredHeaderHeight = headerElem ? headerElem.getBoundingClientRect().height : (window.innerWidth < 640 ? 70 : 80);
+        const extraOffset = window.innerWidth < 640 ? 12 : 16;
+        const totalOffset = measuredHeaderHeight + extraOffset;
+        const elementPosition = catalogElem.getBoundingClientRect().top;
+        const offsetPosition = elementPosition + window.pageYOffset - totalOffset;
+
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: 'smooth'
+        });
+      }
+    });
   }, [localFilters, onFilterChange, setIsModalOpen]);
 
   const formatList = (val: string | string[] | undefined) => {

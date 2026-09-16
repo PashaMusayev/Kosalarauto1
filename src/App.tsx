@@ -430,18 +430,27 @@ export default function App() {
     return transits.filter(c => favorites.includes(c.id) && c.status !== 'sold');
   }, [transits, favorites]);
 
-  // Smooth scroll helper with header height offset calculation
+  // Smooth scroll helper with dynamic header height offset calculation
   const scrollToSection = useCallback((sectionId: string) => {
+    // Ensure body scroll lock is unset
+    document.body.style.overflow = '';
+    
     if (sectionId === 'hero' || sectionId === 'home') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+
     const elem = document.getElementById(sectionId);
     if (elem) {
-      const isMobile = window.innerWidth < 640;
-      const headerOffset = isMobile ? 80 : 90;
+      // Dynamically measure the fixed/sticky header height
+      const headerElem = document.getElementById('main-header') || document.querySelector('header');
+      const measuredHeaderHeight = headerElem ? headerElem.getBoundingClientRect().height : (window.innerWidth < 640 ? 70 : 80);
+      // Add extra breathing room (12px on mobile, 16px on desktop) so content does not touch header border
+      const extraOffset = window.innerWidth < 640 ? 12 : 16;
+      const totalHeaderOffset = measuredHeaderHeight + extraOffset;
+
       const elementPosition = elem.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      const offsetPosition = elementPosition + window.pageYOffset - totalHeaderOffset;
 
       window.scrollTo({
         top: Math.max(0, offsetPosition),
@@ -481,10 +490,14 @@ export default function App() {
         setCurrentPath('/');
         setAdminOpen(false);
         setTimeout(() => {
-          scrollToSection('movcud-avtomobiller');
-        }, 50);
+          requestAnimationFrame(() => {
+            scrollToSection('katalog');
+          });
+        }, 60);
       } else {
-        scrollToSection('movcud-avtomobiller');
+        requestAnimationFrame(() => {
+          scrollToSection('katalog');
+        });
       }
     } else {
       scrollToSection(target);
