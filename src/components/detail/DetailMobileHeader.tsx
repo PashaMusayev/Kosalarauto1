@@ -22,7 +22,11 @@ export const DetailMobileHeader: React.FC<DetailMobileHeaderProps> = ({
       <div className="flex items-center">
         <button
           type="button"
-          onClick={onClose}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onClose();
+          }}
           className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl text-slate-800 bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center transition-all shadow-xs"
           title="Geri"
           aria-label="Geri"

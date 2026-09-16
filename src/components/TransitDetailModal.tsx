@@ -52,25 +52,17 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  // Sub-modal navigation hierarchy (Detail Modal -> Photo Grid -> Lightbox)
-  type SubModalView = 'none' | 'grid' | 'lightbox';
-  const [subView, setSubView] = useState<SubModalView>('none');
+  // Overlay (grid/lightbox) states
+  const [isPhotoGridOpen, setIsPhotoGridOpen] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxSource, setLightboxSource] = useState<'detail' | 'grid'>('detail');
-
-  const subViewRef = useRef<SubModalView>('none');
-  subViewRef.current = subView;
-
-  const lightboxSourceRef = useRef<'detail' | 'grid'>('detail');
-  lightboxSourceRef.current = lightboxSource;
-
-  const isLightboxOpen = subView === 'lightbox';
-  const isPhotoGridOpen = subView === 'grid' || (subView === 'lightbox' && lightboxSource === 'grid');
 
   // Reset active image & scroll to top when car changes
   useEffect(() => {
     setActiveImageIndex(0);
     setCopied(false);
-    setSubView('none');
+    setIsPhotoGridOpen(false);
+    setIsLightboxOpen(false);
     setLightboxSource('detail');
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
@@ -113,106 +105,127 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     }
   }, [imagesList, activeImageIndex]);
 
-  // Sub-modal navigation handlers with pushState
-  const handleOpenPhotoGrid = useCallback(() => {
-    if (!car) return;
+  // URL və tarixçə ilə sinxronizasiya (həm açılışda, həm də popstate zamanı)
+  const syncOverlaysFromUrl = useCallback(() => {
     try {
-      window.history.pushState(
-        { carModal: true, subView: 'grid', carId: car.id },
-        '',
-        window.location.href
-      );
-    } catch (e) {}
-    setSubView('grid');
-  }, [car?.id]);
+      const params = new URLSearchParams(window.location.search);
+      const overlayParam = params.get('overlay');
+      const photoParam = params.get('photo');
+      const state = window.history.state || {};
 
-  const handleSelectPhotoFromGrid = useCallback((index: number) => {
-    if (!car) return;
-    setActiveImageIndex(index);
-    setLightboxSource('grid');
-    try {
-      window.history.pushState(
-        { carModal: true, subView: 'lightbox', from: 'grid', carId: car.id },
-        '',
-        window.location.href
-      );
-    } catch (e) {}
-    setSubView('lightbox');
-  }, [car?.id]);
-
-  const handleOpenLightboxFromDetail = useCallback((index?: number) => {
-    if (!car) return;
-    if (typeof index === 'number') {
-      setActiveImageIndex(index);
-    }
-    setLightboxSource('detail');
-    try {
-      window.history.pushState(
-        { carModal: true, subView: 'lightbox', from: 'detail', carId: car.id },
-        '',
-        window.location.href
-      );
-    } catch (e) {}
-    setSubView('lightbox');
-  }, [car?.id]);
-
-  const handleCloseLightbox = useCallback(() => {
-    if (window.history.state?.subView === 'lightbox') {
-      window.history.back();
-    } else {
-      if (lightboxSourceRef.current === 'grid') {
-        setSubView('grid');
-      } else {
-        setSubView('none');
-      }
-    }
-  }, []);
-
-  const handleClosePhotoGrid = useCallback(() => {
-    if (window.history.state?.subView === 'grid') {
-      window.history.back();
-    } else {
-      setSubView('none');
-    }
-  }, []);
-
-  // Sync sub-modal view with browser history (popstate)
-  useEffect(() => {
-    if (!car) return;
-
-    const handlePopState = (event: PopStateEvent) => {
-      const state = event.state;
-      const targetSubView = state?.subView as SubModalView | undefined;
-
-      if (targetSubView === 'lightbox') {
-        setSubView('lightbox');
-        if (state?.from === 'grid') {
+      if (photoParam !== null || state.overlay === 'lightbox') {
+        if (photoParam !== null) {
+          const photoIdx = parseInt(photoParam, 10);
+          if (!isNaN(photoIdx) && photoIdx >= 0) {
+            setActiveImageIndex(photoIdx);
+          }
+        }
+        setIsLightboxOpen(true);
+        setIsPhotoGridOpen(false);
+        if (overlayParam === 'grid' || state.from === 'grid') {
           setLightboxSource('grid');
         } else {
           setLightboxSource('detail');
         }
-      } else if (targetSubView === 'grid') {
-        setSubView('grid');
+      } else if (overlayParam === 'grid' || state.overlay === 'grid') {
+        setIsPhotoGridOpen(true);
+        setIsLightboxOpen(false);
       } else {
-        // subView is 'none' or not in state -> back to main car detail view
-        setSubView('none');
+        setIsLightboxOpen(false);
+        setIsPhotoGridOpen(false);
       }
+    } catch (e) {
+      setIsLightboxOpen(false);
+      setIsPhotoGridOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncOverlaysFromUrl();
+    const handleOverlayPopState = () => {
+      syncOverlaysFromUrl();
     };
+    window.addEventListener('popstate', handleOverlayPopState);
+    return () => window.removeEventListener('popstate', handleOverlayPopState);
+  }, [syncOverlaysFromUrl]);
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [car]);
+  // Overlay (grid/lightbox) açılışlarını və bağlanışlarını dəqiq idarə edir
+  const openPhotoGrid = useCallback(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('overlay', 'grid');
+      url.searchParams.delete('photo');
+      window.history.pushState({ carModal: true, overlay: 'grid' }, '', url.toString());
+    } catch (e) {}
+    setIsPhotoGridOpen(true);
+    setIsLightboxOpen(false);
+  }, []);
 
-  // Keyboard navigation (Escape to close lightbox, photo grid or modal; Arrow keys handled by active slider)
+  const closePhotoGrid = useCallback(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('overlay') === 'grid' || window.history.state?.overlay === 'grid') {
+        window.history.back();
+        return;
+      }
+    } catch (e) {}
+    setIsPhotoGridOpen(false);
+  }, []);
+
+  const openLightbox = useCallback((source: 'detail' | 'grid' = 'detail', index?: number) => {
+    const targetIdx = typeof index === 'number' ? index : activeImageIndex;
+    setLightboxSource(source);
+    try {
+      const url = new URL(window.location.href);
+      if (source === 'grid') {
+        url.searchParams.set('overlay', 'grid');
+      } else {
+        url.searchParams.delete('overlay');
+      }
+      url.searchParams.set('photo', String(targetIdx));
+      window.history.pushState({ carModal: true, overlay: 'lightbox', from: source, photo: targetIdx }, '', url.toString());
+    } catch (e) {}
+    setIsLightboxOpen(true);
+    setIsPhotoGridOpen(false);
+  }, [activeImageIndex]);
+
+  const closeLightbox = useCallback(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('photo') || window.history.state?.overlay === 'lightbox') {
+        window.history.back();
+        return;
+      }
+    } catch (e) {}
+    setIsLightboxOpen(false);
+  }, []);
+
+  // Lightbox-da şəkil dəyişdikdə URL-dəki 'photo' parametrini replaceState ilə yenilə
+  const handleLightboxIndexChange = useCallback((newIndex: number) => {
+    setActiveImageIndex(newIndex);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('photo', String(newIndex));
+      window.history.replaceState({ carModal: true, overlay: 'lightbox', from: lightboxSource, photo: newIndex }, '', url.toString());
+    } catch (e) {}
+  }, [lightboxSource]);
+
+  // Grid-dən şəkil seçiləndə: grid qeydi tarixçədə qalır, üstünə lightbox əlavə olunur
+  const handleSelectPhotoFromGrid = useCallback((index: number) => {
+    setActiveImageIndex(index);
+    openLightbox('grid', index);
+  }, [openLightbox]);
+
+  // Keyboard navigation (Escape to close lightbox, photo grid or modal)
   useEffect(() => {
     if (!car) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (subViewRef.current === 'lightbox') {
-          handleCloseLightbox();
-        } else if (subViewRef.current === 'grid') {
-          handleClosePhotoGrid();
+        if (isLightboxOpen) {
+          closeLightbox();
+        } else if (isPhotoGridOpen) {
+          closePhotoGrid();
         } else {
           onClose();
         }
@@ -221,7 +234,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [car?.id, handleCloseLightbox, handleClosePhotoGrid, onClose]);
+  }, [car?.id, isLightboxOpen, isPhotoGridOpen, closeLightbox, closePhotoGrid, onClose]);
 
   // Check if car object is valid
   if (!car) return null;
@@ -405,11 +418,13 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
       {/* Modal Backdrop (Overlay) */}
       <div 
         className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/85 backdrop-blur-xs overflow-hidden overscroll-contain touch-pan-y"
-        onClick={onClose}
+        onClick={isPhotoGridOpen || isLightboxOpen ? undefined : onClose}
       >
         {/* Modal Window: Full-width on mobile, rounded card on tablet/desktop */}
         <div 
-          className="bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 max-w-2xl md:max-w-5xl lg:max-w-6xl w-full h-[100dvh] md:h-auto md:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden my-0 md:my-auto relative animate-in fade-in zoom-in-95 duration-200 overscroll-contain"
+          className={`bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 max-w-2xl md:max-w-5xl lg:max-w-6xl w-full h-[100dvh] md:h-auto md:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden my-0 md:my-auto relative animate-in fade-in zoom-in-95 duration-200 overscroll-contain ${
+            isPhotoGridOpen || isLightboxOpen ? 'pointer-events-none select-none invisible md:visible' : ''
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Top Sticky Header */}
@@ -438,10 +453,13 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
                   onIndexChange={setActiveImageIndex}
                   safeTitle={safeTitle}
                   onImageClick={(clickedIndex) => {
-                    handleOpenLightboxFromDetail(clickedIndex);
+                    if (typeof clickedIndex === 'number') {
+                      setActiveImageIndex(clickedIndex);
+                    }
+                    openLightbox('detail');
                   }}
-                  onOpenPhotoGrid={handleOpenPhotoGrid}
-                  disabledKeyNav={isLightboxOpen || subView === 'grid'}
+                  onOpenPhotoGrid={openPhotoGrid}
+                  disabledKeyNav={isLightboxOpen || isPhotoGridOpen}
                   className="w-full aspect-[4/3] md:aspect-auto md:h-[500px] flex items-center justify-center bg-black"
                 />
               </div>
@@ -518,7 +536,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
       {/* Mobile-only "Bütün şəkillər" Grid Gallery (Turbo.az Style) */}
       <DetailPhotoGrid
         isOpen={isPhotoGridOpen}
-        onClose={handleClosePhotoGrid}
+        onClose={closePhotoGrid}
         imagesList={imagesList}
         title={vehicleMainTitle || safeTitle}
         onSelectPhoto={handleSelectPhotoFromGrid}
@@ -528,10 +546,10 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
       {/* Fullscreen Photo Lightbox (Turbo.az Style - Desktop & Mobile) */}
       <DetailLightbox
         isOpen={isLightboxOpen}
-        onClose={handleCloseLightbox}
+        onClose={closeLightbox}
         imagesList={imagesList}
         activeImageIndex={activeImageIndex}
-        setActiveImageIndex={setActiveImageIndex}
+        setActiveImageIndex={handleLightboxIndexChange}
         safeTitle={safeTitle}
         safePrice={safePrice}
         lightboxCarDetails={lightboxCarDetails}

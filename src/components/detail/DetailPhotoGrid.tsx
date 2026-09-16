@@ -55,7 +55,11 @@ export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
             {/* Geri Düyməsi */}
             <button
               type="button"
-              onClick={onClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onClose();
+              }}
               className="w-10 h-10 rounded-xl text-slate-800 bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
               title="Geri"
               aria-label="Geri"

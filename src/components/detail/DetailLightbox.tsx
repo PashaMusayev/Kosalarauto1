@@ -94,7 +94,11 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
             <button
               type="button"
               id="btn-lightbox-back"
-              onClick={onClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onClose();
+              }}
               className="w-10 h-10 flex items-center justify-center text-white hover:opacity-75 active:scale-95 transition-all cursor-pointer"
               title={isFromGrid ? "Geri" : "Bağla (Esc)"}
               aria-label={isFromGrid ? "Geri" : "Bağla"}
@@ -187,7 +191,11 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
                 <button
                   type="button"
                   id="btn-lightbox-desktop-back"
-                  onClick={onClose}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onClose();
+                  }}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold transition-all cursor-pointer select-none"
                   title="Qalereyaya qayıt"
                   aria-label="Qalereyaya qayıt"
@@ -200,7 +208,11 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
               <button
                 type="button"
                 id="btn-lightbox-desktop-close"
-                onClick={onClose}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onClose();
+                }}
                 className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center text-white transition-all cursor-pointer"
                 title={isFromGrid ? "Qalereyaya qayıt (Esc)" : "Bağla (Esc)"}
                 aria-label={isFromGrid ? "Geri" : "Bağla"}

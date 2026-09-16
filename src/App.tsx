@@ -338,6 +338,8 @@ export default function App() {
     try {
       const url = new URL(window.location.href);
       url.searchParams.set('car', car.id);
+      url.searchParams.delete('overlay');
+      url.searchParams.delete('photo');
       window.history.pushState({ carModal: true }, '', url.toString());
     } catch (e) {}
   }, []);
@@ -352,6 +354,8 @@ export default function App() {
         setSelectedCar(null);
         const url = new URL(window.location.href);
         url.searchParams.delete('car');
+        url.searchParams.delete('overlay');
+        url.searchParams.delete('photo');
         window.history.replaceState({}, '', url.toString());
       }
     } catch (e) {
