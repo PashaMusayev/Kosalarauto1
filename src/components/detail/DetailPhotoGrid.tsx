@@ -20,21 +20,6 @@ export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
   onSelectPhoto,
   disabledEscape = false,
 }) => {
-  // Keyboard accessibility: Escape key closes the grid
-  useEffect(() => {
-    if (!isOpen || disabledEscape) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, disabledEscape, onClose]);
-
   return (
     <AnimatePresence>
       {isOpen && (

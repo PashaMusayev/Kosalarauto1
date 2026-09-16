@@ -217,11 +217,26 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   }, [openLightbox]);
 
   // Keyboard navigation (Escape to close lightbox, photo grid or modal)
+  const lastEscTimeRef = useRef<number>(0);
+
   useEffect(() => {
     if (!car) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // Prevent key-repeat if user holds down Escape
+        if (e.repeat) return;
+
+        // Debounce rapid Escape keystrokes (minimum 220ms between closes)
+        const now = Date.now();
+        if (now - lastEscTimeRef.current < 220) {
+          return;
+        }
+        lastEscTimeRef.current = now;
+
+        e.preventDefault();
+        e.stopPropagation();
+
         if (isLightboxOpen) {
           closeLightbox();
         } else if (isPhotoGridOpen) {
