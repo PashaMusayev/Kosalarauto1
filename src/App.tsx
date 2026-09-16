@@ -16,6 +16,7 @@ import { INITIAL_TRANSITS, WHATSAPP_NUMBER, WHATSAPP_DIRECT_LINK } from './data/
 import { TransitCar, FilterState } from './types';
 import { MessageCircle, Truck, Sparkles, FilterX } from 'lucide-react';
 import whatsappLogo from './pics/whatsapp logo.png';
+import salonFoto from './assets/images/Salonfoto.jpg';
 import { fetchCarsFromSupabase, fetchAllCarsFromApi } from './services/carService';
 import { getSupabaseClient } from './services/supabaseClientInit';
 import { trackWhatsAppClick } from './services/analyticsService';
@@ -119,6 +120,12 @@ export default function App() {
       console.warn('Could not save favorites to localStorage:', e);
     }
   }, [favorites]);
+
+  // Preload About Us showroom location image immediately on app mount
+  useEffect(() => {
+    const img = new Image();
+    img.src = salonFoto;
+  }, []);
 
   // Set document title and sync state with Supabase / server API
   useEffect(() => {

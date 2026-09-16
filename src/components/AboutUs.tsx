@@ -1,9 +1,23 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Heart, MapPin, CheckCircle2, Phone } from 'lucide-react';
 import { PHONE_NUMBER, SHOWROOM_ADDRESS } from '../data/transits';
 import salonFoto from '../assets/images/Salonfoto.jpg';
 
 export const AboutUs: React.FC = () => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    // Check if the image is already cached/completed in browser memory
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      const preloader = new Image();
+      preloader.src = salonFoto;
+      preloader.onload = () => setIsLoaded(true);
+    }
+  }, []);
+
   return (
     <section id="haqqimizda" className="py-14 md:py-18 bg-[#F8FAFC] text-slate-800 scroll-mt-20 sm:scroll-mt-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -13,17 +27,36 @@ export const AboutUs: React.FC = () => {
           {/* Left Column Image */}
           <div className="lg:col-span-5 relative">
             <div className="relative rounded-2xl overflow-hidden shadow-md border border-slate-200 bg-white p-2">
-              <div className="relative rounded-xl overflow-hidden bg-slate-900">
+              <div className="relative rounded-xl overflow-hidden bg-slate-100 min-h-[360px] flex items-center justify-center">
+                {/* Light Skeleton Placeholder while loading */}
+                {!isLoaded && (
+                  <div className="absolute inset-0 bg-slate-200 animate-pulse z-10" />
+                )}
+
                 <img
+                  ref={imgRef}
                   src={salonFoto}
                   alt="Məkanımız - Kosalar Auto"
-                  loading="lazy"
+                  loading="eager"
+                  decoding="async"
+                  onLoad={() => setIsLoaded(true)}
                   referrerPolicy="no-referrer"
-                  className="w-full h-[360px] object-cover"
+                  className={`w-full h-[360px] object-cover transition-opacity duration-300 ${
+                    isLoaded ? 'opacity-100' : 'opacity-0'
+                  }`}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent"></div>
                 
-                <div className="absolute bottom-5 left-5 right-5 text-white">
+                <div 
+                  className={`absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent transition-opacity duration-300 z-20 ${
+                    isLoaded ? 'opacity-100' : 'opacity-0'
+                  }`} 
+                />
+                
+                <div 
+                  className={`absolute bottom-5 left-5 right-5 text-white transition-opacity duration-300 z-20 ${
+                    isLoaded ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
                   <p className="text-lg font-bold">Məkanımız</p>
                   <p className="text-xs text-slate-300">{SHOWROOM_ADDRESS}</p>
                 </div>
