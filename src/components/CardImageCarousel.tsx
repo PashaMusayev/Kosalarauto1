@@ -88,6 +88,11 @@ export const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
   onCardClick,
   children,
 }) => {
+  // Stable key to prevent re-initializing carousel when parent components re-render
+  const imagesKey = useMemo(() => {
+    return `${carId}:${primaryImage || ''}:${(images || []).join('|')}`;
+  }, [carId, primaryImage, images]);
+
   // Deduplicate and prioritize primaryImage first
   const imagesList = useMemo(() => {
     const list: string[] = [];
@@ -105,7 +110,7 @@ export const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
       }
     }
     return list.length > 0 ? list : [DEFAULT_VEHICLE_PLACEHOLDER];
-  }, [primaryImage, images]);
+  }, [imagesKey, primaryImage, images]);
 
   const totalImages = imagesList.length;
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -113,10 +118,13 @@ export const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
   // Lazy loading: only load current and adjacent slide indices
   const [loadedIndices, setLoadedIndices] = useState<Set<number>>(() => new Set([0]));
 
+  // Embla Carousel: Smooth natural cubic deceleration transition (~280-320ms), no autoplay/timer
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: false,
     skipSnaps: false,
-    duration: 20,
+    dragFree: false,
+    containScroll: 'trimSnaps',
+    duration: 28, // Natural easing physics settle duration (~280-320ms)
     watchDrag: totalImages > 1,
   });
 
@@ -127,7 +135,7 @@ export const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
     if (emblaApi) {
       emblaApi.scrollTo(0, true);
     }
-  }, [carId, imagesList, emblaApi]);
+  }, [imagesKey, emblaApi]);
 
   // Sync Embla scroll state with React state
   const onSelect = useCallback(() => {
@@ -284,6 +292,7 @@ export const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
           {selectedIndex > 0 && (
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={scrollPrev}
               className="hidden sm:flex absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-black/80 text-white items-center justify-center z-20 cursor-pointer shadow-md active:scale-95 transition-all opacity-0 group-hover:opacity-100 duration-150"
               title="Əvvəlki şəkil"
@@ -296,6 +305,7 @@ export const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
           {selectedIndex < totalImages - 1 && (
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={scrollNext}
               className="hidden sm:flex absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-black/80 text-white items-center justify-center z-20 cursor-pointer shadow-md active:scale-95 transition-all opacity-0 group-hover:opacity-100 duration-150"
               title="Növbəti şəkil"

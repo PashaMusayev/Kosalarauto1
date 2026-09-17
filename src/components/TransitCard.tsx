@@ -57,6 +57,7 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
         {/* Favorite Button (Heart) */}
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             if (car?.id) onToggleFavorite(car.id);
