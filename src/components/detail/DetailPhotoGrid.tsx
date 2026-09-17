@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getValidImageUrl, handleImageLoadError } from '../../utils/imageFallback';
@@ -10,6 +10,8 @@ interface DetailPhotoGridProps {
   title: string;
   onSelectPhoto: (index: number) => void;
   disabledEscape?: boolean;
+  initialScrollTop?: number;
+  onScrollPositionChange?: (scrollTop: number) => void;
 }
 
 export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
@@ -19,7 +21,35 @@ export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
   title,
   onSelectPhoto,
   disabledEscape = false,
+  initialScrollTop = 0,
+  onScrollPositionChange,
 }) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Restore scroll position when grid opens/mounts
+  useLayoutEffect(() => {
+    if (isOpen && scrollContainerRef.current && initialScrollTop > 0) {
+      scrollContainerRef.current.scrollTop = initialScrollTop;
+      const rafId = requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = initialScrollTop;
+        }
+      });
+      return () => cancelAnimationFrame(rafId);
+    }
+  }, [isOpen, initialScrollTop]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    onScrollPositionChange?.(e.currentTarget.scrollTop);
+  };
+
+  const handleSelect = (idx: number) => {
+    if (scrollContainerRef.current) {
+      onScrollPositionChange?.(scrollContainerRef.current.scrollTop);
+    }
+    onSelectPhoto(idx);
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -75,13 +105,17 @@ export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
           </div>
 
           {/* 2 Sütunlu Şəkil Qridi (Turbo.az Mobil Tərzi) */}
-          <div className="flex-1 overflow-y-auto overscroll-contain p-2.5 sm:p-4">
+          <div
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto overscroll-contain p-2.5 sm:p-4"
+          >
             <div className="grid grid-cols-2 gap-2 sm:gap-3 max-w-4xl mx-auto">
               {imagesList.map((img, idx) => (
                 <button
                   key={`photo-grid-item-${idx}`}
                   type="button"
-                  onClick={() => onSelectPhoto(idx)}
+                  onClick={() => handleSelect(idx)}
                   className="group relative aspect-[4/3] w-full rounded-xl overflow-hidden bg-slate-200 shadow-xs active:scale-[0.98] transition-transform cursor-pointer border border-slate-200/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D4ED8]"
                   title={`${idx + 1}-ci şəkil`}
                   aria-label={`${title} - ${idx + 1}-ci şəkil`}

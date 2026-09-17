@@ -56,6 +56,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   const [isPhotoGridOpen, setIsPhotoGridOpen] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxSource, setLightboxSource] = useState<'detail' | 'grid'>('detail');
+  const photoGridScrollPositionRef = useRef<number>(0);
 
   // Reset active image & scroll to top when car changes
   useEffect(() => {
@@ -64,6 +65,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     setIsPhotoGridOpen(false);
     setIsLightboxOpen(false);
     setLightboxSource('detail');
+    photoGridScrollPositionRef.current = 0;
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
       scrollContainerRef.current.scrollTop = 0;
@@ -139,10 +141,12 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
       } else {
         setIsLightboxOpen(false);
         setIsPhotoGridOpen(false);
+        photoGridScrollPositionRef.current = 0;
       }
     } catch (e) {
       setIsLightboxOpen(false);
       setIsPhotoGridOpen(false);
+      photoGridScrollPositionRef.current = 0;
     }
   }, []);
 
@@ -162,6 +166,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   const openPhotoGrid = useCallback(() => {
     isHistoryNavigatingRef.current = false;
     prefetchImages(imagesList);
+    photoGridScrollPositionRef.current = 0;
     try {
       const url = new URL(window.location.href);
       url.searchParams.set('overlay', 'grid');
@@ -173,6 +178,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   }, [imagesList]);
 
   const closePhotoGrid = useCallback(() => {
+    photoGridScrollPositionRef.current = 0;
     if (isHistoryNavigatingRef.current) return;
     try {
       const params = new URLSearchParams(window.location.search);
@@ -443,6 +449,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     setIsPhotoGridOpen(false);
     setIsLightboxOpen(false);
     setLightboxSource('detail');
+    photoGridScrollPositionRef.current = 0;
 
     if (onSelectCar) {
       onSelectCar(simCar);
@@ -586,6 +593,10 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
         title={vehicleMainTitle || safeTitle}
         onSelectPhoto={handleSelectPhotoFromGrid}
         disabledEscape={isLightboxOpen}
+        initialScrollTop={photoGridScrollPositionRef.current}
+        onScrollPositionChange={(top) => {
+          photoGridScrollPositionRef.current = top;
+        }}
       />
 
       {/* Fullscreen Photo Lightbox (Turbo.az Style - Desktop & Mobile) */}
