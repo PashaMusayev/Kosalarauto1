@@ -38,19 +38,10 @@ export const Header: React.FC<HeaderProps> = ({
     setMobileMenuOpen(false);
 
     if (target === '/haqqimizda' || target === 'haqqimizda') {
-      try {
-        window.history.pushState({}, '', '/haqqimizda');
-      } catch (e) {}
       onNavigate('/haqqimizda');
     } else if (target === '/elaqe' || target === 'elaqe') {
-      try {
-        window.history.pushState({}, '', '/elaqe');
-      } catch (e) {}
       onNavigate('/elaqe');
     } else if (target === '/' || target === 'hero' || target === 'home') {
-      try {
-        window.history.pushState({}, '', '/');
-      } catch (e) {}
       onNavigate('/');
     } else if (target === 'movcud-avtomobiller') {
       onNavigate('movcud-avtomobiller');
