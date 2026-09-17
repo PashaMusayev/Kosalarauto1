@@ -135,10 +135,16 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               Ünvan və saatlar
             </h4>
             <div className="space-y-2.5 text-xs text-slate-400">
-              <div className="flex items-start gap-2">
-                <MapPin className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-                <span>{SHOWROOM_ADDRESS}</span>
-              </div>
+              <a
+                href={SHOWROOM_MAP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-2 text-slate-400 hover:text-white transition-colors group"
+                title="Google Maps-də bax"
+              >
+                <MapPin className="w-4 h-4 text-blue-400 shrink-0 mt-0.5 group-hover:text-blue-300 transition-colors" />
+                <span className="group-hover:underline underline-offset-2">{SHOWROOM_ADDRESS}</span>
+              </a>
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-blue-400 shrink-0" />
                 <span>{WORKING_HOURS}</span>
