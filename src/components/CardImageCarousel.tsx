@@ -118,13 +118,13 @@ export const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
   // Lazy loading: only load current and adjacent slide indices
   const [loadedIndices, setLoadedIndices] = useState<Set<number>>(() => new Set([0]));
 
-  // Embla Carousel: Smooth natural cubic deceleration transition (~280-320ms), no autoplay/timer
+  // Embla Carousel: Smooth natural cubic deceleration transition (~300-350ms), no autoplay/timer
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: false,
     skipSnaps: false,
     dragFree: false,
     containScroll: 'trimSnaps',
-    duration: 28, // Natural easing physics settle duration (~280-320ms)
+    duration: 35, // Natural easing physics settle duration (~300-350ms)
     watchDrag: totalImages > 1,
   });
 
@@ -133,7 +133,7 @@ export const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
     setSelectedIndex(0);
     setLoadedIndices(new Set([0]));
     if (emblaApi) {
-      emblaApi.scrollTo(0, true);
+      emblaApi.scrollTo(0, false);
     }
   }, [imagesKey, emblaApi]);
 
@@ -174,17 +174,17 @@ export const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
     }
   }, [selectedIndex, totalImages, imagesList]);
 
-  // Desktop Prev & Next navigation
+  // Desktop Prev & Next navigation with smooth transition
   const scrollPrev = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    if (emblaApi) emblaApi.scrollPrev();
+    if (emblaApi) emblaApi.scrollPrev(false);
   }, [emblaApi]);
 
   const scrollNext = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    if (emblaApi) emblaApi.scrollNext();
+    if (emblaApi) emblaApi.scrollNext(false);
   }, [emblaApi]);
 
   // Robust gesture vs click discrimination

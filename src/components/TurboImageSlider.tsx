@@ -654,7 +654,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: totalImages > 1,
     skipSnaps: false,
-    duration: 25,
+    duration: 35, // Smooth slide transition ~320-350ms (replaces abrupt 25)
     startIndex: activeImageIndex || 0,
     watchDrag: (embla, evt) => {
       if (totalImages <= 1) return false;
@@ -668,7 +668,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
 
   const handleCancelDrag = useCallback(() => {
     if (emblaApi) {
-      emblaApi.scrollTo(activeImageIndex, true);
+      emblaApi.scrollTo(activeImageIndex, false);
     }
   }, [emblaApi, activeImageIndex]);
 
@@ -783,9 +783,9 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
         const candidate2 = activeImageIndex + 2;
         const diff1 = Math.abs(currentSnap - candidate1);
         const diff2 = Math.abs(currentSnap - candidate2);
-        emblaApi.scrollTo(diff1 <= diff2 ? candidate1 : candidate2, true);
+        emblaApi.scrollTo(diff1 <= diff2 ? candidate1 : candidate2, false);
       } else {
-        emblaApi.scrollTo(activeImageIndex, true);
+        emblaApi.scrollTo(activeImageIndex, false);
       }
     }
   }, [emblaApi, activeImageIndex, totalImages]);
@@ -803,9 +803,9 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') {
-        if (emblaApi) emblaApi.scrollNext();
+        if (emblaApi) emblaApi.scrollNext(false);
       } else if (e.key === 'ArrowLeft') {
-        if (emblaApi) emblaApi.scrollPrev();
+        if (emblaApi) emblaApi.scrollPrev(false);
       }
     };
 
@@ -820,7 +820,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       e.preventDefault();
     }
     if (emblaApi) {
-      emblaApi.scrollPrev();
+      emblaApi.scrollPrev(false);
     }
   }, [emblaApi]);
 
@@ -830,7 +830,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       e.preventDefault();
     }
     if (emblaApi) {
-      emblaApi.scrollNext();
+      emblaApi.scrollNext(false);
     }
   }, [emblaApi]);
 
