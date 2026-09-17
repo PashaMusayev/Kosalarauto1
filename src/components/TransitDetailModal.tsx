@@ -157,6 +157,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
   // Overlay (grid/lightbox) açılışlarını və bağlanışlarını dəqiq idarə edir
   const openPhotoGrid = useCallback(() => {
+    prefetchImages(imagesList);
     try {
       const url = new URL(window.location.href);
       url.searchParams.set('overlay', 'grid');
@@ -165,7 +166,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     } catch (e) {}
     setIsPhotoGridOpen(true);
     setIsLightboxOpen(false);
-  }, []);
+  }, [imagesList]);
 
   const closePhotoGrid = useCallback(() => {
     try {

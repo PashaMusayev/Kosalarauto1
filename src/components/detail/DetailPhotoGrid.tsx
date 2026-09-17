@@ -89,7 +89,8 @@ export const DetailPhotoGrid: React.FC<DetailPhotoGridProps> = ({
                   <img
                     src={getValidImageUrl(img)}
                     alt={`${title} - ${idx + 1}`}
-                    loading="lazy"
+                    loading={idx < 4 ? 'eager' : 'lazy'}
+                    decoding="async"
                     referrerPolicy="no-referrer"
                     onError={(e) => handleImageLoadError(e.currentTarget)}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
