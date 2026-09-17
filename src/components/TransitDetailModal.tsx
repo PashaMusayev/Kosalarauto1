@@ -146,9 +146,12 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     }
   }, []);
 
+  const isHistoryNavigatingRef = useRef<boolean>(false);
+
   useEffect(() => {
     syncOverlaysFromUrl();
     const handleOverlayPopState = () => {
+      isHistoryNavigatingRef.current = false;
       syncOverlaysFromUrl();
     };
     window.addEventListener('popstate', handleOverlayPopState);
@@ -157,6 +160,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
 
   // Overlay (grid/lightbox) açılışlarını və bağlanışlarını dəqiq idarə edir
   const openPhotoGrid = useCallback(() => {
+    isHistoryNavigatingRef.current = false;
     prefetchImages(imagesList);
     try {
       const url = new URL(window.location.href);
@@ -169,10 +173,15 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   }, [imagesList]);
 
   const closePhotoGrid = useCallback(() => {
+    if (isHistoryNavigatingRef.current) return;
     try {
       const params = new URLSearchParams(window.location.search);
       if (params.get('overlay') === 'grid' || window.history.state?.overlay === 'grid') {
+        isHistoryNavigatingRef.current = true;
         window.history.back();
+        setTimeout(() => {
+          isHistoryNavigatingRef.current = false;
+        }, 150);
         return;
       }
     } catch (e) {}
@@ -180,6 +189,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   }, []);
 
   const openLightbox = useCallback((source: 'detail' | 'grid' = 'detail', index?: number) => {
+    isHistoryNavigatingRef.current = false;
     const targetIdx = typeof index === 'number' ? index : activeImageIndex;
     setLightboxSource(source);
     try {
@@ -197,10 +207,15 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   }, [activeImageIndex]);
 
   const closeLightbox = useCallback(() => {
+    if (isHistoryNavigatingRef.current) return;
     try {
       const params = new URLSearchParams(window.location.search);
       if (params.has('photo') || window.history.state?.overlay === 'lightbox') {
+        isHistoryNavigatingRef.current = true;
         window.history.back();
+        setTimeout(() => {
+          isHistoryNavigatingRef.current = false;
+        }, 150);
         return;
       }
     } catch (e) {}
@@ -224,8 +239,6 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   }, [openLightbox]);
 
   // Keyboard navigation (Escape to close lightbox, photo grid or modal)
-  const lastEscTimeRef = useRef<number>(0);
-
   useEffect(() => {
     if (!car) return;
 
@@ -234,12 +247,12 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
         // Prevent key-repeat if user holds down Escape
         if (e.repeat) return;
 
-        // Debounce rapid Escape keystrokes (minimum 220ms between closes)
-        const now = Date.now();
-        if (now - lastEscTimeRef.current < 220) {
+        // If a history pop is already in-flight, ignore until popstate resolves to avoid double-popping
+        if (isHistoryNavigatingRef.current) {
+          e.preventDefault();
+          e.stopPropagation();
           return;
         }
-        lastEscTimeRef.current = now;
 
         e.preventDefault();
         e.stopPropagation();
