@@ -16,6 +16,7 @@ interface DetailDesktopSidebarProps {
   safeTransmission: string;
   safeWheelDrive: string;
   safeBodyType: string;
+  safeColor?: string;
   safeSeatCount: string;
   safeBaseLength: string;
   safeCondition: string;
@@ -34,11 +35,22 @@ export const DetailDesktopSidebar: React.FC<DetailDesktopSidebarProps> = ({
   safeTransmission,
   safeWheelDrive,
   safeBodyType,
+  safeColor,
   safeSeatCount,
   safeBaseLength,
   safeCondition,
   whatsappUrl,
 }) => {
+  const engineParts = [
+    safeEngine ? (safeEngine.toLowerCase().includes('l') ? safeEngine : `${safeEngine} L`) : '',
+    safeHp ? `${safeHp}` : '',
+    safeFuelType ? safeFuelType : ''
+  ].filter(Boolean);
+
+  const cleanWheelDrive = safeWheelDrive
+    ? safeWheelDrive.replace(/\s*\((?:FWD|RWD|AWD|4WD)\)/gi, '').trim()
+    : '';
+
   return (
     <div className="hidden md:flex md:w-[42%] lg:w-[40%] flex-col justify-between p-6 lg:p-7 bg-white border-l border-slate-200">
       {/* Yuxarı Məlumatlar */}
@@ -53,9 +65,11 @@ export const DetailDesktopSidebar: React.FC<DetailDesktopSidebarProps> = ({
           <h1 className="text-lg lg:text-xl font-bold text-slate-900 leading-snug">
             {vehicleMainTitle}
           </h1>
-          <div className="text-sm font-semibold text-slate-600 mt-1">
-            {safeMileage} km
-          </div>
+          {safeMileage && safeMileage !== '0' ? (
+            <div className="text-sm font-semibold text-slate-600 mt-1">
+              {safeMileage} km
+            </div>
+          ) : null}
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
               Gömrük olunub
@@ -71,48 +85,72 @@ export const DetailDesktopSidebar: React.FC<DetailDesktopSidebarProps> = ({
 
         {/* 3. Xüsusiyyətlər (Yığcam Cədvəl - Turbo.az Stili) */}
         <div className="border-t border-slate-200 pt-3 space-y-2 text-xs lg:text-sm">
-          <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-            <span className="text-slate-500 font-normal">Şəhər</span>
-            <span className="font-semibold text-slate-900">{safeLocation}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-            <span className="text-slate-500 font-normal">Yürüş</span>
-            <span className="font-semibold text-slate-900">{safeMileage} km</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-            <span className="text-slate-500 font-normal">Buraxılış ili</span>
-            <span className="font-semibold text-slate-900">{safeYear || '-'}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-            <span className="text-slate-500 font-normal">Mühərrik</span>
-            <span className="font-semibold text-slate-900">{safeEngine} L{safeHp ? ` / ${safeHp}` : ''} / {safeFuelType}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-            <span className="text-slate-500 font-normal">Sürətlər qutusu</span>
-            <span className="font-semibold text-slate-900">{safeTransmission}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-            <span className="text-slate-500 font-normal">Ötürücü</span>
-            <span className="font-semibold text-slate-900">{safeWheelDrive}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-            <span className="text-slate-500 font-normal">Ban növü</span>
-            <span className="font-semibold text-slate-900">{safeBodyType}</span>
-          </div>
+          {safeLocation ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Şəhər</span>
+              <span className="font-semibold text-slate-900">{safeLocation}</span>
+            </div>
+          ) : null}
+          {safeMileage !== '' && safeMileage !== undefined ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Yürüş</span>
+              <span className="font-semibold text-slate-900">{safeMileage} km</span>
+            </div>
+          ) : null}
+          {safeYear ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Buraxılış ili</span>
+              <span className="font-semibold text-slate-900">{safeYear}</span>
+            </div>
+          ) : null}
+          {engineParts.length > 0 ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Mühərrik</span>
+              <span className="font-semibold text-slate-900">{engineParts.join(' / ')}</span>
+            </div>
+          ) : null}
+          {safeTransmission ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Sürətlər qutusu</span>
+              <span className="font-semibold text-slate-900">{safeTransmission}</span>
+            </div>
+          ) : null}
+          {cleanWheelDrive ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Ötürücü</span>
+              <span className="font-semibold text-slate-900">{cleanWheelDrive}</span>
+            </div>
+          ) : null}
+          {safeBodyType ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Ban növü</span>
+              <span className="font-semibold text-slate-900">{safeBodyType}</span>
+            </div>
+          ) : null}
+          {safeColor ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Rəng</span>
+              <span className="font-semibold text-slate-900">{safeColor}</span>
+            </div>
+          ) : null}
           {safeSeatCount ? (
             <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
               <span className="text-slate-500 font-normal">Yerlərin sayı</span>
               <span className="font-semibold text-slate-900">{safeSeatCount}</span>
             </div>
           ) : null}
-          <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-            <span className="text-slate-500 font-normal">Baza uzunluğu</span>
-            <span className="font-semibold text-slate-900">{safeBaseLength}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-            <span className="text-slate-500 font-normal">Vəziyyəti</span>
-            <span className="font-semibold text-emerald-700">{safeCondition}</span>
-          </div>
+          {safeBaseLength ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Baza uzunluğu</span>
+              <span className="font-semibold text-slate-900">{safeBaseLength}</span>
+            </div>
+          ) : null}
+          {safeCondition ? (
+            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
+              <span className="text-slate-500 font-normal">Vəziyyəti</span>
+              <span className="font-semibold text-emerald-700">{safeCondition}</span>
+            </div>
+          ) : null}
         </div>
       </div>
 

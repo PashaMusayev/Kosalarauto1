@@ -30,7 +30,9 @@ import { getAdminAuthHeaders } from '../services/adminAuthService';
 import { 
   FormImageItem, 
   SaveProgressState, 
-  DEFAULT_STANDARD_FEATURES 
+  DEFAULT_STANDARD_FEATURES,
+  normalizeEngineValue,
+  normalizeWheelDriveValue
 } from './admin/adminTypes';
 import { AdminHeader } from './admin/AdminHeader';
 import { AdminLoginForm } from './admin/AdminLoginForm';
@@ -328,7 +330,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setSaveError(null);
     setTitle(car.title || '');
     const rawB = (car.brand || car.make || '').trim();
-    setBrand(rawB.toLowerCase().includes('mercedes') || (car.title && car.title.toLowerCase().includes('mercedes')) ? 'Mercedes' : rawB);
+    const finalBrand = rawB.toLowerCase().includes('mercedes') || (car.title && car.title.toLowerCase().includes('mercedes')) 
+      ? 'Mercedes' 
+      : (rawB.toLowerCase().includes('ford') || (car.title && car.title.toLowerCase().includes('transit')) ? 'Ford' : rawB);
+    setBrand(finalBrand);
     setModel(car.model || '');
     setCity(car.city || car.location || '');
     setPrice(typeof car.price === 'number' ? car.price : (car.price ? Number(car.price) : ''));
@@ -336,11 +341,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setMileage(typeof car.mileage === 'number' ? car.mileage : (car.mileage ? Number(car.mileage) : ''));
     setBodyType(car.bodyType || '');
     setColor(car.color || '');
-    setEngine(car.engine || '');
+    setEngine(normalizeEngineValue(car.engine || ''));
     setHp(typeof car.hp === 'number' ? car.hp : (car.hp ? Number(car.hp) : ''));
     setFuelType(car.fuelType || '');
     setTransmission(car.transmission || '');
-    setWheelDrive(car.wheelDrive || '');
+    setWheelDrive(normalizeWheelDriveValue(car.wheelDrive || ''));
     setBaseLength(car.baseLength || '');
     setRoofHeight(car.roofHeight || '');
     setSeatCount(car.seatCount || '');

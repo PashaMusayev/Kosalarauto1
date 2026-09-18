@@ -13,7 +13,15 @@ import {
   RefreshCw, 
   Save 
 } from 'lucide-react';
-import { FormImageItem, SaveProgressState, DEFAULT_STANDARD_FEATURES } from './adminTypes';
+import { 
+  FormImageItem, 
+  SaveProgressState, 
+  DEFAULT_STANDARD_FEATURES,
+  BRAND_MODELS,
+  STANDARD_COLORS,
+  STANDARD_ENGINE_OPTIONS,
+  STANDARD_WHEEL_DRIVE_OPTIONS
+} from './adminTypes';
 import { ImageUploader } from './ImageUploader';
 import { STORAGE_BUCKET_NAME } from '../../services/supabaseClientInit';
 
@@ -174,6 +182,19 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const currentBrand = brand.toLowerCase().includes('mercedes') 
+    ? 'Mercedes' 
+    : (brand.toLowerCase().includes('ford') ? 'Ford' : brand);
+  const modelOptions = currentBrand && BRAND_MODELS[currentBrand] ? BRAND_MODELS[currentBrand] : [];
+
+  const handleBrandChange = (newBrand: string) => {
+    setBrand(newBrand);
+    if (newBrand !== currentBrand) {
+      setModel('');
+      setTitle(newBrand.trim());
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center p-1.5 sm:p-4 bg-black/90 backdrop-blur-md overflow-y-auto">
       <div className="bg-slate-900 border border-slate-700 rounded-xl sm:rounded-2xl shadow-2xl max-w-4xl w-full max-h-[96vh] sm:max-h-[92vh] flex flex-col overflow-hidden text-slate-200">
@@ -284,18 +305,17 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                       Marka <span className="text-rose-400">*</span>:
                     </label>
                     <select
-                      value={brand.toLowerCase().includes('mercedes') ? 'Mercedes' : brand}
-                      onChange={(e) => {
-                        const newBrand = e.target.value;
-                        setBrand(newBrand);
-                        setTitle(`${newBrand} ${model}`.trim());
-                      }}
+                      value={currentBrand}
+                      onChange={(e) => handleBrandChange(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-blue-500 focus:outline-none"
                       required
                     >
                       <option value="">Seçin...</option>
-                      <option value="Mercedes">Mercedes</option>
                       <option value="Ford">Ford</option>
+                      <option value="Mercedes">Mercedes</option>
+                      {currentBrand && currentBrand !== 'Ford' && currentBrand !== 'Mercedes' && (
+                        <option value={currentBrand}>{currentBrand}</option>
+                      )}
                     </select>
                   </div>
 
@@ -304,18 +324,49 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                     <label className="font-bold text-slate-300 block mb-1">
                       Model <span className="text-rose-400">*</span>:
                     </label>
-                    <input
-                      type="text"
-                      value={model}
-                      onChange={(e) => {
-                        const newModel = e.target.value;
-                        setModel(newModel);
-                        setTitle(`${brand} ${newModel}`.trim());
-                      }}
-                      placeholder=""
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-blue-500 focus:outline-none"
-                      required
-                    />
+                    {currentBrand && modelOptions.length > 0 ? (
+                      <select
+                        value={model}
+                        onChange={(e) => {
+                          const newModel = e.target.value;
+                          setModel(newModel);
+                          setTitle(`${currentBrand} ${newModel}`.trim());
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-blue-500 focus:outline-none"
+                        required
+                      >
+                        <option value="">Seçin...</option>
+                        {modelOptions.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                        {model && !modelOptions.includes(model) && (
+                          <option value={model}>{model}</option>
+                        )}
+                      </select>
+                    ) : !currentBrand ? (
+                      <select
+                        disabled
+                        value=""
+                        className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-slate-500 font-medium cursor-not-allowed"
+                      >
+                        <option value="">Əvvəlcə markanı seçin...</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={model}
+                        onChange={(e) => {
+                          const newModel = e.target.value;
+                          setModel(newModel);
+                          setTitle(`${currentBrand} ${newModel}`.trim());
+                        }}
+                        placeholder="Modeli daxil edin"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-blue-500 focus:outline-none"
+                        required
+                      />
+                    )}
                   </div>
 
                   {/* Buraxılış İli */}
@@ -439,15 +490,23 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                   {/* Mühərrik (Engine) */}
                   <div>
                     <label className="font-bold text-slate-300 block mb-1">
-                      Mühərrik (Engine):
+                      Mühərrik:
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={engine}
                       onChange={(e) => setEngine(e.target.value)}
-                      placeholder=""
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-amber-500 focus:outline-none"
-                    />
+                    >
+                      <option value="">Seçin...</option>
+                      {STANDARD_ENGINE_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                      {engine && !STANDARD_ENGINE_OPTIONS.includes(engine) && (
+                        <option value={engine}>{engine}</option>
+                      )}
+                    </select>
                   </div>
 
                   {/* At Gücü (HP) */}
@@ -503,10 +562,10 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                     </select>
                   </div>
 
-                  {/* Ötürücü (Drive Train) */}
+                  {/* Ötürücü (Wheel Drive) */}
                   <div className="sm:col-span-1 md:col-span-2">
                     <label className="font-bold text-slate-300 block mb-1">
-                      Ötürücü (Drive Train):
+                      Ötürücü:
                     </label>
                     <select
                       value={wheelDrive}
@@ -514,8 +573,14 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-amber-500 focus:outline-none"
                     >
                       <option value="">Seçin...</option>
-                      <option value="Ön (qabaq)">Ön (qabaq)</option>
-                      <option value="Arxa">Arxa</option>
+                      {STANDARD_WHEEL_DRIVE_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                      {wheelDrive && !STANDARD_WHEEL_DRIVE_OPTIONS.includes(wheelDrive) && (
+                        <option value={wheelDrive}>{wheelDrive}</option>
+                      )}
                     </select>
                   </div>
 
@@ -613,13 +678,21 @@ export const CarFormModal: React.FC<CarFormModalProps> = ({
                     <label className="font-bold text-slate-300 block mb-1">
                       Rəng:
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={color}
                       onChange={(e) => setColor(e.target.value)}
-                      placeholder=""
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-purple-500 focus:outline-none"
-                    />
+                    >
+                      <option value="">Seçin...</option>
+                      {STANDARD_COLORS.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                      {color && !STANDARD_COLORS.includes(color) && (
+                        <option value={color}>{color}</option>
+                      )}
+                    </select>
                   </div>
                 </div>
               </div>

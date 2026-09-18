@@ -62,7 +62,7 @@ export function mapSupabaseRowToCar(row: Record<string, unknown>): TransitCar {
   const brand = normalizeBrand(String(row.brand || row.make || specs.brand || specs.make || ''), String(row.title || ''));
   const model = normalizeModel(String(row.model || specs.model || ''), String(row.title || ''));
   const city = String(row.city || row.location || specs.city || specs.location || 'Bakı');
-  const condition = String(row.condition || specs.condition || 'Vuruğu yoxdur, rənglənməyib');
+  const condition = String(row.condition ?? specs.condition ?? '').trim();
 
   return {
     id: String(row.id),
@@ -73,18 +73,18 @@ export function mapSupabaseRowToCar(row: Record<string, unknown>): TransitCar {
     city: city,
     location: city,
     year: Number(row.year || specs.year) || 2011,
-    bodyType: String(row.body_type || row.bodyType || specs.bodyType || specs.body_type || 'Yük furqonu'),
-    engine: String(row.engine || specs.engine || '2.2 TDCi'),
-    hp: Number(row.horse_power || row.hp || specs.hp || 125),
-    transmission: String(row.transmission || specs.transmission || 'Mexaniki'),
+    bodyType: String(row.body_type ?? row.bodyType ?? specs.bodyType ?? specs.body_type ?? '').trim(),
+    engine: String(row.engine ?? specs.engine ?? '').trim(),
+    hp: Number(row.horse_power || row.hp || specs.hp) || 0,
+    transmission: String(row.transmission ?? specs.transmission ?? '').trim(),
     mileage: Number(row.mileage || specs.mileage) || 0,
     price: Number(row.price || specs.price) || 0,
-    baseLength: String(row.base_length || row.baseLength || specs.baseLength || specs.base_length || '3.30 m'),
-    roofHeight: String(row.roof_height || row.roofHeight || specs.roofHeight || specs.roof_height || 'Hündür dam'),
-    seatCount: row.seat_count ? String(row.seat_count) : (row.seatCount ? String(row.seatCount) : (specs.seatCount ? String(specs.seatCount) : (specs.seat_count ? String(specs.seat_count) : undefined))),
-    wheelDrive: String(row.drive_type || row.wheelDrive || row.driveTrain || specs.wheelDrive || specs.drive_type || 'Ön çəkən (FWD)'),
-    color: String(row.color || specs.color || 'Ağ'),
-    fuelType: String(row.fuel_type || row.fuelType || specs.fuelType || 'Dizel'),
+    baseLength: String(row.base_length ?? row.baseLength ?? specs.baseLength ?? specs.base_length ?? '').trim(),
+    roofHeight: String(row.roof_height ?? row.roofHeight ?? specs.roofHeight ?? specs.roof_height ?? '').trim(),
+    seatCount: row.seat_count ? String(row.seat_count).trim() : (row.seatCount ? String(row.seatCount).trim() : (specs.seatCount ? String(specs.seatCount).trim() : (specs.seat_count ? String(specs.seat_count).trim() : undefined))),
+    wheelDrive: String(row.drive_type ?? row.wheelDrive ?? row.driveTrain ?? specs.wheelDrive ?? specs.drive_type ?? '').trim(),
+    color: String(row.color ?? specs.color ?? '').trim(),
+    fuelType: String(row.fuel_type ?? row.fuelType ?? specs.fuelType ?? '').trim(),
     condition: condition,
     vinCode: String(row.vin_code || row.vinCode || specs.vinCode || specs.vin_code || ''),
     statusBadges: Array.isArray(row.badges) ? (row.badges as string[]) : (Array.isArray(row.statusBadges) ? (row.statusBadges as string[]) : ['Vuruqsuz', 'Gömrük olunub', 'Zəmanətli']),
@@ -105,7 +105,7 @@ export function mapCarToSupabaseRow(car: TransitCar): Record<string, unknown> {
   const brand = car.brand || car.make || (car.title?.toLowerCase().includes('mercedes') ? 'Mercedes' : 'Ford');
   const model = car.model || (car.title?.toLowerCase().includes('sprinter') ? 'Sprinter' : 'Transit');
   const city = car.city || car.location || 'Bakı';
-  const condition = car.condition || 'Vuruğu yoxdur, rənglənməyib';
+  const condition = String(car.condition ?? '').trim();
 
   return {
     id: car.id,
@@ -118,16 +118,16 @@ export function mapCarToSupabaseRow(car: TransitCar): Record<string, unknown> {
     year: Number(car.year) || 2011,
     price: Number(car.price) || 0,
     mileage: Number(car.mileage) || 0,
-    engine: car.engine || '2.2 TDCi',
-    horse_power: Number(car.hp) || 125,
-    transmission: car.transmission || 'Mexaniki',
-    drive_type: car.wheelDrive || 'Ön çəkən (FWD)',
-    body_type: car.bodyType || 'Yük furqonu',
-    base_length: car.baseLength || '3.30 m',
-    roof_height: car.roofHeight || 'Hündür dam',
-    ...(car.seatCount ? { seat_count: String(car.seatCount) } : {}),
-    color: car.color || 'Ağ',
-    fuel_type: car.fuelType || 'Dizel',
+    engine: String(car.engine ?? '').trim(),
+    horse_power: Number(car.hp) || 0,
+    transmission: String(car.transmission ?? '').trim(),
+    drive_type: String(car.wheelDrive ?? '').trim(),
+    body_type: String(car.bodyType ?? '').trim(),
+    base_length: String(car.baseLength ?? '').trim(),
+    roof_height: String(car.roofHeight ?? '').trim(),
+    ...(car.seatCount ? { seat_count: String(car.seatCount).trim() } : {}),
+    color: String(car.color ?? '').trim(),
+    fuel_type: String(car.fuelType ?? '').trim(),
     condition: condition,
     vin_code: car.vinCode || '',
     primary_image: car.primaryImage || (car.images && car.images[0]) || '',

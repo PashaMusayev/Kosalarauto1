@@ -182,29 +182,30 @@ function validateAndSanitizeCars(cars: unknown[]): { valid: boolean; error?: str
     }
 
     const id = String(c.id || `car-${Date.now()}-${i}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
-    const title = String(c.title || 'Avtomobil').slice(0, 200);
-    const brand = String(c.brand || c.make || 'Ford').slice(0, 100);
-    const model = String(c.model || 'Transit').slice(0, 100);
-    const city = String(c.city || c.location || 'Bakı').slice(0, 100);
+    const brand = String(c.brand || c.make || 'Ford').trim().slice(0, 100);
+    const model = String(c.model || 'Transit').trim().slice(0, 100);
+    const title = String(c.title || `${brand} ${model}`).trim().slice(0, 200);
+    const city = String(c.city || c.location || 'Bakı').trim().slice(0, 100);
     const location = city;
-    const bodyType = String(c.bodyType || c.body_type || 'Yük furqonu').slice(0, 100);
-    const color = String(c.color || 'Ağ').slice(0, 100);
-    const engine = String(c.engine || '2.2 TDCi').slice(0, 100);
-    const hp = Math.min(2000, Math.max(0, Number(c.hp || c.horsePower || c.horse_power) || 125));
-    const fuelType = String(c.fuelType || c.fuel_type || 'Dizel').slice(0, 100);
-    const transmission = String(c.transmission || 'Mexaniki').slice(0, 100);
-    const wheelDrive = String(c.wheelDrive || c.driveType || c.drive_type || 'Ön çəkən (FWD)').slice(0, 100);
-    const baseLength = String(c.baseLength || c.base_length || '3.30 m').slice(0, 100);
-    const roofHeight = String(c.roofHeight || c.roof_height || 'Hündür dam').slice(0, 100);
+    const bodyType = String(c.bodyType ?? c.body_type ?? '').trim().slice(0, 100);
+    const color = String(c.color ?? '').trim().slice(0, 100);
+    const engine = String(c.engine ?? '').trim().slice(0, 100);
+    const rawHp = c.hp !== undefined && c.hp !== null ? Number(c.hp) : (c.horsePower !== undefined && c.horsePower !== null ? Number(c.horsePower) : (c.horse_power !== undefined && c.horse_power !== null ? Number(c.horse_power) : undefined));
+    const hp = rawHp !== undefined && !isNaN(rawHp) && rawHp > 0 ? Math.min(2000, Math.max(0, rawHp)) : 0;
+    const fuelType = String(c.fuelType ?? c.fuel_type ?? '').trim().slice(0, 100);
+    const transmission = String(c.transmission ?? '').trim().slice(0, 100);
+    const wheelDrive = String(c.wheelDrive ?? c.driveType ?? c.drive_type ?? '').trim().slice(0, 100);
+    const baseLength = String(c.baseLength ?? c.base_length ?? '').trim().slice(0, 100);
+    const roofHeight = String(c.roofHeight ?? c.roof_height ?? '').trim().slice(0, 100);
     const rawSeatCount = c.seatCount !== undefined && c.seatCount !== null 
       ? c.seatCount 
       : (c.seat_count !== undefined && c.seat_count !== null 
           ? c.seat_count 
           : (c.specs && typeof c.specs === 'object' ? ((c.specs as Record<string, unknown>).seatCount || (c.specs as Record<string, unknown>).seat_count) : undefined));
     const seatCount = rawSeatCount ? String(rawSeatCount).trim().slice(0, 50) : undefined;
-    const condition = String(c.condition || 'Vuruğu yoxdur, rənglənməyib').slice(0, 200);
-    const vinCode = String(c.vinCode || c.vin_code || '').trim().toUpperCase().slice(0, 50);
-    const description = String(c.description || '').slice(0, 5000);
+    const condition = String(c.condition ?? '').trim().slice(0, 200);
+    const vinCode = String(c.vinCode ?? c.vin_code ?? '').trim().toUpperCase().slice(0, 50);
+    const description = String(c.description ?? '').slice(0, 5000);
     const isFeatured = Boolean(c.isFeatured ?? c.is_featured);
     const status = c.status === 'sold' ? 'sold' : 'active';
 
@@ -478,20 +479,20 @@ function formatSupabaseCarRow(row: Record<string, any>): Record<string, unknown>
     year: Number(row.year || specs.year) || 2011,
     price: Number(row.price || specs.price) || 0,
     mileage: Number(row.mileage || specs.mileage) || 0,
-    engine: String(row.engine || specs.engine || '2.2 TDCi'),
-    hp: Number(row.horse_power || row.horsePower || row.hp || specs.hp) || 125,
-    horsePower: Number(row.horse_power || row.horsePower || row.hp || specs.hp) || 125,
-    transmission: String(row.transmission || specs.transmission || 'Mexaniki'),
-    wheelDrive: String(row.drive_type || row.driveType || row.wheelDrive || specs.wheelDrive || 'Ön çəkən (FWD)'),
-    driveType: String(row.drive_type || row.driveType || row.wheelDrive || specs.wheelDrive || 'Ön çəkən (FWD)'),
-    bodyType: String(row.body_type || row.bodyType || specs.bodyType || specs.body_type || 'Yük furqonu'),
-    baseLength: String(row.base_length || row.baseLength || specs.baseLength || specs.base_length || '3.30 m'),
-    roofHeight: String(row.roof_height || row.roofHeight || specs.roofHeight || specs.roof_height || 'Hündür dam'),
-    seatCount: row.seat_count ? String(row.seat_count) : (row.seatCount ? String(row.seatCount) : (specs.seatCount ? String(specs.seatCount) : (specs.seat_count ? String(specs.seat_count) : undefined))),
-    color: String(row.color || specs.color || 'Ağ'),
-    fuelType: String(row.fuel_type || row.fuelType || specs.fuelType || 'Dizel'),
+    engine: String(row.engine ?? specs.engine ?? '').trim(),
+    hp: Number(row.horse_power || row.horsePower || row.hp || specs.hp) || 0,
+    horsePower: Number(row.horse_power || row.horsePower || row.hp || specs.hp) || 0,
+    transmission: String(row.transmission ?? specs.transmission ?? '').trim(),
+    wheelDrive: String(row.drive_type ?? row.driveType ?? row.wheelDrive ?? specs.wheelDrive ?? specs.drive_type ?? '').trim(),
+    driveType: String(row.drive_type ?? row.driveType ?? row.wheelDrive ?? specs.wheelDrive ?? specs.drive_type ?? '').trim(),
+    bodyType: String(row.body_type ?? row.bodyType ?? specs.bodyType ?? specs.body_type ?? '').trim(),
+    baseLength: String(row.base_length ?? row.baseLength ?? specs.baseLength ?? specs.base_length ?? '').trim(),
+    roofHeight: String(row.roof_height ?? row.roofHeight ?? specs.roofHeight ?? specs.roof_height ?? '').trim(),
+    seatCount: row.seat_count ? String(row.seat_count).trim() : (row.seatCount ? String(row.seatCount).trim() : (specs.seatCount ? String(specs.seatCount).trim() : (specs.seat_count ? String(specs.seat_count).trim() : undefined))),
+    color: String(row.color ?? specs.color ?? '').trim(),
+    fuelType: String(row.fuel_type ?? row.fuelType ?? specs.fuelType ?? '').trim(),
     condition: condition,
-    vinCode: String(row.vin_code || row.vinCode || specs.vinCode || specs.vin_code || ''),
+    vinCode: String(row.vin_code ?? row.vinCode ?? specs.vinCode ?? specs.vin_code ?? '').trim(),
     primaryImage: String(row.primary_image || row.primaryImage || ''),
     images: Array.isArray(row.images) ? row.images : (row.primary_image ? [String(row.primary_image)] : []),
     description: String(row.description || specs.description || ''),
@@ -514,7 +515,7 @@ function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string
     : (rawBrandInput || ((c.title as string)?.toLowerCase().includes('mercedes') ? 'Mercedes' : 'Ford'));
   const model = (c.model as string) || ((c.title as string)?.toLowerCase().includes('sprinter') ? 'Sprinter' : 'Transit');
   const city = (c.city as string) || (c.location as string) || 'Bakı';
-  const condition = (c.condition as string) || 'Vuruğu yoxdur, rənglənməyib';
+  const condition = String(c.condition ?? '').trim();
   const primaryImage = (c.primaryImage as string) || ((Array.isArray(c.images) && typeof c.images[0] === 'string') ? c.images[0] : '');
 
   return {
@@ -528,16 +529,16 @@ function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string
     year: Number(c.year) || 2011,
     price: Number(c.price) || 0,
     mileage: Number(c.mileage) || 0,
-    engine: c.engine || '2.2 TDCi',
-    horse_power: Number((c.horsePower as number) || (c.hp as number) || 125),
-    transmission: c.transmission || 'Mexaniki',
-    drive_type: c.wheelDrive || c.driveType || 'Ön çəkən (FWD)',
-    body_type: c.bodyType || 'Yük furqonu',
-    base_length: c.baseLength || '3.30 m',
-    roof_height: c.roofHeight || 'Hündür dam',
-    ...(c.seatCount ? { seat_count: String(c.seatCount) } : {}),
-    color: c.color || 'Ağ',
-    fuel_type: c.fuelType || 'Dizel',
+    engine: String(c.engine ?? '').trim(),
+    horse_power: Number((c.horsePower as number) || (c.hp as number) || 0),
+    transmission: String(c.transmission ?? '').trim(),
+    drive_type: String(c.wheelDrive ?? c.driveType ?? '').trim(),
+    body_type: String(c.bodyType ?? '').trim(),
+    base_length: String(c.baseLength ?? '').trim(),
+    roof_height: String(c.roofHeight ?? '').trim(),
+    ...(c.seatCount ? { seat_count: String(c.seatCount).trim() } : {}),
+    color: String(c.color ?? '').trim(),
+    fuel_type: String(c.fuelType ?? '').trim(),
     condition: condition,
     vin_code: (c.vinCode as string) || '',
     primary_image: primaryImage,
@@ -549,7 +550,7 @@ function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string
     status: c.status === 'sold' ? 'sold' : 'active',
     specs: (typeof c.specs === 'object' && c.specs !== null) ? {
       ...(c.specs as Record<string, unknown>),
-      ...(c.seatCount ? { seatCount: String(c.seatCount) } : {})
+      ...(c.seatCount ? { seatCount: String(c.seatCount).trim() } : {})
     } : {
       brand,
       make: brand,
@@ -557,16 +558,16 @@ function mapSanitizedCarToSupabaseRow(c: Record<string, unknown>): Record<string
       city,
       location: city,
       condition,
-      baseLength: c.baseLength,
-      roofHeight: c.roofHeight,
-      ...(c.seatCount ? { seatCount: c.seatCount } : {}),
-      transmission: c.transmission,
-      wheelDrive: c.wheelDrive,
-      engine: c.engine,
-      hp: c.hp,
-      color: c.color,
-      fuelType: c.fuelType,
-      bodyType: c.bodyType,
+      baseLength: String(c.baseLength ?? '').trim(),
+      roofHeight: String(c.roofHeight ?? '').trim(),
+      ...(c.seatCount ? { seatCount: String(c.seatCount).trim() } : {}),
+      transmission: String(c.transmission ?? '').trim(),
+      wheelDrive: String(c.wheelDrive ?? c.driveType ?? '').trim(),
+      engine: String(c.engine ?? '').trim(),
+      hp: Number((c.horsePower as number) || (c.hp as number) || 0),
+      color: String(c.color ?? '').trim(),
+      fuelType: String(c.fuelType ?? '').trim(),
+      bodyType: String(c.bodyType ?? '').trim(),
       year: c.year,
       mileage: c.mileage,
       price: c.price,

@@ -287,22 +287,26 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   const safeYear = car?.year ? String(car.year) : '';
   const safePrice = formatNumberSafe(car?.price, '0');
   const safeMileage = formatNumberSafe(car?.mileage, '0');
-  const safeEngine = car?.engine || '2.2';
-  const safeFuelType = car?.fuelType || 'Dizel';
-  const safeTransmission = car?.transmission || 'Mexanika';
-  const safeBodyType = car?.bodyType || 'Yük furqonu';
-  const safeColor = car?.color || 'Ağ';
-  const safeWheelDrive = car?.wheelDrive || 'Ön çəkən (FWD)';
-  const safeBaseLength = car?.baseLength || '3.30 m';
-  const safeRoofHeight = car?.roofHeight || 'Orta dam';
+  const safeEngine = car?.engine ? String(car.engine).trim() : '';
+  const safeFuelType = car?.fuelType ? String(car.fuelType).trim() : '';
+  const safeTransmission = car?.transmission ? String(car.transmission).trim() : '';
+  const safeBodyType = car?.bodyType ? String(car.bodyType).trim() : '';
+  const safeColor = car?.color ? String(car.color).trim() : '';
+  const safeWheelDrive = car?.wheelDrive ? String(car.wheelDrive).trim() : '';
+  const safeBaseLength = car?.baseLength ? String(car.baseLength).trim() : '';
+  const safeRoofHeight = car?.roofHeight ? String(car.roofHeight).trim() : '';
   const safeLocation = car?.city || car?.location || 'Bakı';
-  const safeCondition = car?.condition || 'Vuruğu yoxdur, rənglənməyib';
+  const safeCondition = car?.condition ? String(car.condition).trim() : '';
   const safeHp = car?.hp ? `${car.hp} a.g.` : '';
   const safeSeatCount = car?.seatCount ? String(car.seatCount).trim() : '';
 
   // Subtitle format without horsepower
-  const engineSubtitle = safeEngine.includes('L') ? safeEngine : `${safeEngine} L`;
-  const vehicleMainTitle = `${safeTitle}, ${engineSubtitle}${safeYear ? `, ${safeYear} il` : ''}`;
+  const engineSubtitle = safeEngine ? (safeEngine.toLowerCase().includes('l') ? safeEngine : `${safeEngine} L`) : '';
+  const vehicleMainTitle = [
+    safeTitle,
+    engineSubtitle,
+    safeYear ? `${safeYear} il` : ''
+  ].filter(Boolean).join(', ');
 
   // Turbo.az Lightbox details format: e.g. "Mercedes Sprinter, 2.2L, 2012 il, 215 000 km"
   const cleanEngineText = useMemo(() => {
@@ -529,6 +533,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
                 safeTransmission={safeTransmission}
                 safeWheelDrive={safeWheelDrive}
                 safeBodyType={safeBodyType}
+                safeColor={safeColor}
                 safeSeatCount={safeSeatCount}
                 safeBaseLength={safeBaseLength}
                 safeCondition={safeCondition}
