@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react';
-import useEmblaCarousel from 'embla-carousel-react';
 import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl, handleImageLoadError } from '../utils/imageFallback';
 import { prefetchCarouselWindow } from '../utils/imagePreloader';
 
@@ -15,610 +14,6 @@ interface TurboImageSliderProps {
   className?: string;
   onOpenPhotoGrid?: () => void;
 }
-
-interface SlideItemProps {
-  slide: { src: string; originalIndex: number };
-  activeImageIndex: number;
-  totalImages: number;
-  safeTitle: string;
-  isLightbox: boolean;
-  isPreloadAllowed: boolean;
-  onSlideClick: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onZoomChange?: (isZoomed: boolean) => void;
-  onCancelDrag?: () => void;
-  onTouchActivity?: () => void;
-  onPrev?: () => void;
-  onNext?: () => void;
-}
-
-enum GestureState {
-  IDLE = 'IDLE',
-  PINCH = 'PINCH',
-  PAN = 'PAN',
-  SWIPE = 'SWIPE',
-}
-
-const SlideItem = React.memo<SlideItemProps>(({
-  slide,
-  activeImageIndex,
-  totalImages,
-  safeTitle,
-  isLightbox,
-  isPreloadAllowed,
-  onSlideClick,
-  onZoomChange,
-  onCancelDrag,
-  onTouchActivity,
-  onPrev,
-  onNext,
-}) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isZoomed, setIsZoomed] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(() => {
-    return typeof window !== 'undefined' ? window.innerWidth >= 768 : false;
-  });
-
-  const isActive = slide.originalIndex === activeImageIndex;
-
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-
-  // Authoritative synchronous refs for 60fps gesture transforms (immune to React render lag)
-  const currentScaleRef = useRef(1);
-  const currentTranslateRef = useRef({ x: 0, y: 0 });
-  const gestureStateRef = useRef<GestureState>(GestureState.IDLE);
-
-  // Pinch tracking
-  const pinchStartDistRef = useRef(0);
-  const pinchStartScaleRef = useRef(1);
-  const pinchStartTranslateRef = useRef({ x: 0, y: 0 });
-  const pinchStartFocalRef = useRef({ x: 0, y: 0 });
-  const pinchStartCenterScreenRef = useRef({ x: 0, y: 0 });
-
-  // Pan tracking
-  const panStartTouchRef = useRef({ x: 0, y: 0 });
-  const panStartTranslateRef = useRef({ x: 0, y: 0 });
-  const panBoundaryOverflowXRef = useRef(0);
-  const panHasMovedRef = useRef(false);
-
-  // Tap & double-tap tracking
-  const lastTapTimeRef = useRef(0);
-  const lastTapPosRef = useRef({ x: 0, y: 0 });
-  const touchStartTimeRef = useRef(0);
-  const suppressClickUntilRef = useRef(0);
-
-  // If image is already complete in browser HTTP cache, mark loaded immediately
-  useEffect(() => {
-    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
-      setIsLoaded(true);
-    }
-  }, [slide.src, isPreloadAllowed]);
-
-  // Apply transform directly to DOM for 60fps responsiveness
-  const applyTransform = useCallback((s: number, x: number, y: number, withTransition: boolean) => {
-    // Strictly isolate & disable desktop Lightbox zoom transforms (md: and above)
-    if (isLightbox && typeof window !== 'undefined' && window.innerWidth >= 768) {
-      s = 1;
-      x = 0;
-      y = 0;
-    }
-
-    currentScaleRef.current = s;
-    currentTranslateRef.current = { x, y };
-
-    if (!wrapperRef.current) return;
-    wrapperRef.current.style.transition = withTransition
-      ? 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)'
-      : 'none';
-    wrapperRef.current.style.transform = `translate3d(${x}px, ${y}px, 0px) scale(${s})`;
-  }, [isLightbox]);
-
-  // Reset zoom helper: resets scale=1, panX=0, panY=0
-  const handleResetZoom = useCallback((withTransition = true) => {
-    currentScaleRef.current = 1;
-    currentTranslateRef.current = { x: 0, y: 0 };
-    setIsZoomed(false);
-    applyTransform(1, 0, 0, withTransition);
-    onZoomChange?.(false);
-  }, [applyTransform, onZoomChange]);
-
-  // Track responsive viewport size and reset zoom if transitioning to desktop
-  useEffect(() => {
-    const handleResize = () => {
-      const desktop = window.innerWidth >= 768;
-      setIsDesktop(desktop);
-      if (desktop && isLightbox && currentScaleRef.current > 1) {
-        handleResetZoom(false);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [isLightbox, handleResetZoom]);
-
-  // Reset zoom whenever slide becomes inactive
-  useEffect(() => {
-    if (!isActive && isLightbox) {
-      handleResetZoom(false);
-    }
-  }, [isActive, isLightbox, handleResetZoom]);
-
-  // Toggle zoom (for double-tap on mobile; strictly disabled on desktop md: and above)
-  const handleToggleZoom = useCallback((clientX: number, clientY: number) => {
-    if (!isLightbox) return;
-    // Strictly disable zoom on desktop (md: breakpoint >= 768px)
-    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
-      return;
-    }
-
-    if (currentScaleRef.current > 1.02) {
-      // Return cleanly to 1x
-      handleResetZoom(true);
-    } else {
-      // Zoom in to 2.5x centered at tap/click coordinates
-      const container = containerRef.current;
-      if (!container) return;
-
-      const rect = container.getBoundingClientRect();
-      const targetScale = 2.5;
-
-      const cX = rect.left + rect.width / 2;
-      const cY = rect.top + rect.height / 2;
-      const offsetX = clientX - cX;
-      const offsetY = clientY - cY;
-
-      const targetX = -offsetX * (targetScale - 1);
-      const targetY = -offsetY * (targetScale - 1);
-
-      const maxX = Math.max(0, (rect.width * (targetScale - 1)) / 2);
-      const maxY = Math.max(0, (rect.height * (targetScale - 1)) / 2);
-
-      const clampedX = Math.max(-maxX, Math.min(maxX, targetX));
-      const clampedY = Math.max(-maxY, Math.min(maxY, targetY));
-
-      currentScaleRef.current = targetScale;
-      currentTranslateRef.current = { x: clampedX, y: clampedY };
-      setIsZoomed(true);
-      applyTransform(targetScale, clampedX, clampedY, true);
-      onZoomChange?.(true);
-    }
-  }, [isLightbox, handleResetZoom, applyTransform, onZoomChange]);
-
-  // Native touch gesture listeners for 60fps pinch-to-zoom & pan in Lightbox
-  useEffect(() => {
-    if (!isLightbox) return;
-    const container = containerRef.current;
-    if (!container) return;
-
-    // Prevent Safari iOS default page zoom
-    const onGesture = (e: Event) => {
-      e.preventDefault();
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (!isActive) return;
-      // On desktop (md: breakpoint >= 768px), disable touch pinch/zoom gestures
-      if (window.innerWidth >= 768) return;
-      onTouchActivity?.();
-
-      if (e.touches.length >= 2) {
-        // TWO-FINGER PINCH START
-        gestureStateRef.current = GestureState.PINCH;
-        panHasMovedRef.current = true;
-        e.preventDefault();
-        e.stopPropagation();
-
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
-        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-
-        pinchStartDistRef.current = Math.max(10, dist);
-        // CRITICAL: Always use CURRENT scale as base zoom! Never reset to 1x!
-        pinchStartScaleRef.current = currentScaleRef.current;
-        pinchStartTranslateRef.current = { ...currentTranslateRef.current };
-
-        const rect = container.getBoundingClientRect();
-        const cX = rect.left + rect.width / 2;
-        const cY = rect.top + rect.height / 2;
-        pinchStartCenterScreenRef.current = {
-          x: (t0.clientX + t1.clientX) / 2,
-          y: (t0.clientY + t1.clientY) / 2,
-        };
-        pinchStartFocalRef.current = {
-          x: pinchStartCenterScreenRef.current.x - cX,
-          y: pinchStartCenterScreenRef.current.y - cY,
-        };
-
-        onCancelDrag?.();
-        return;
-      }
-
-      if (e.touches.length === 1) {
-        const t = e.touches[0];
-        touchStartTimeRef.current = Date.now();
-        panHasMovedRef.current = false;
-        panBoundaryOverflowXRef.current = 0;
-        panStartTouchRef.current = { x: t.clientX, y: t.clientY };
-        panStartTranslateRef.current = { ...currentTranslateRef.current };
-
-        if (currentScaleRef.current > 1.02) {
-          gestureStateRef.current = GestureState.PAN;
-        } else {
-          gestureStateRef.current = GestureState.SWIPE;
-        }
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isActive) return;
-      // On desktop (md: breakpoint >= 768px), disable touch pinch/zoom gestures
-      if (window.innerWidth >= 768) return;
-
-      if (e.touches.length >= 2) {
-        // TWO-FINGER PINCH IN PROGRESS
-        if (gestureStateRef.current !== GestureState.PINCH) {
-          gestureStateRef.current = GestureState.PINCH;
-          panHasMovedRef.current = true;
-          const t0 = e.touches[0];
-          const t1 = e.touches[1];
-          pinchStartDistRef.current = Math.max(10, Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY));
-          pinchStartScaleRef.current = currentScaleRef.current;
-          pinchStartTranslateRef.current = { ...currentTranslateRef.current };
-          const rect = container.getBoundingClientRect();
-          const cX = rect.left + rect.width / 2;
-          const cY = rect.top + rect.height / 2;
-          pinchStartCenterScreenRef.current = {
-            x: (t0.clientX + t1.clientX) / 2,
-            y: (t0.clientY + t1.clientY) / 2,
-          };
-          pinchStartFocalRef.current = {
-            x: pinchStartCenterScreenRef.current.x - cX,
-            y: pinchStartCenterScreenRef.current.y - cY,
-          };
-          onCancelDrag?.();
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-        panHasMovedRef.current = true;
-
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
-        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-        if (pinchStartDistRef.current <= 0) return;
-
-        const ratio = dist / pinchStartDistRef.current;
-        const rawScale = pinchStartScaleRef.current * ratio;
-
-        // CRITICAL: Hard limits MIN_ZOOM = 1.0, MAX_ZOOM = 4.0
-        // Never allow shrinking below 1x (no 0.9x, 0.8x, 0.5x). Continuous scaling.
-        const newScale = Math.min(4.0, Math.max(1.0, rawScale));
-
-        const currCenter = {
-          x: (t0.clientX + t1.clientX) / 2,
-          y: (t0.clientY + t1.clientY) / 2,
-        };
-
-        // Continuous focal point tracking
-        const scaleRatio = newScale / Math.max(0.01, pinchStartScaleRef.current);
-        const zoomDx = (pinchStartFocalRef.current.x - pinchStartTranslateRef.current.x) * (1 - scaleRatio);
-        const zoomDy = (pinchStartFocalRef.current.y - pinchStartTranslateRef.current.y) * (1 - scaleRatio);
-
-        const panDx = currCenter.x - pinchStartCenterScreenRef.current.x;
-        const panDy = currCenter.y - pinchStartCenterScreenRef.current.y;
-
-        const rawX = pinchStartTranslateRef.current.x + zoomDx + panDx;
-        const rawY = pinchStartTranslateRef.current.y + zoomDy + panDy;
-
-        const rect = container.getBoundingClientRect();
-        const maxX = Math.max(0, (rect.width * (newScale - 1)) / 2);
-        const maxY = Math.max(0, (rect.height * (newScale - 1)) / 2);
-
-        const clampedX = Math.max(-maxX, Math.min(maxX, rawX));
-        const clampedY = Math.max(-maxY, Math.min(maxY, rawY));
-
-        currentScaleRef.current = newScale;
-        currentTranslateRef.current = { x: clampedX, y: clampedY };
-        applyTransform(newScale, clampedX, clampedY, false);
-
-        if (newScale > 1.02) {
-          setIsZoomed(true);
-          onZoomChange?.(true);
-        } else {
-          setIsZoomed(false);
-          onZoomChange?.(false);
-        }
-        return;
-      }
-
-      if (e.touches.length === 1) {
-        const t = e.touches[0];
-        const dx = t.clientX - panStartTouchRef.current.x;
-        const dy = t.clientY - panStartTouchRef.current.y;
-        const moveDist = Math.hypot(dx, dy);
-
-        if (moveDist > 6) {
-          panHasMovedRef.current = true;
-        }
-
-        // ONE-FINGER PAN AFTER ZOOM
-        if (gestureStateRef.current === GestureState.PAN && currentScaleRef.current > 1.02) {
-          e.preventDefault();
-          e.stopPropagation();
-
-          const rect = container.getBoundingClientRect();
-          const scale = currentScaleRef.current;
-          const maxX = Math.max(0, (rect.width * (scale - 1)) / 2);
-          const maxY = Math.max(0, (rect.height * (scale - 1)) / 2);
-
-          const rawX = panStartTranslateRef.current.x + dx;
-          const rawY = panStartTranslateRef.current.y + dy;
-
-          let targetX = rawX;
-          let overflowX = 0;
-
-          if (rawX > maxX) {
-            overflowX = rawX - maxX;
-            targetX = maxX + overflowX * 0.3; // natural boundary resistance
-          } else if (rawX < -maxX) {
-            overflowX = rawX - (-maxX);
-            targetX = -maxX + overflowX * 0.3; // natural boundary resistance
-          }
-
-          const clampedY = Math.max(-maxY, Math.min(maxY, rawY));
-
-          panBoundaryOverflowXRef.current = overflowX;
-          currentTranslateRef.current = { x: targetX, y: clampedY };
-          applyTransform(scale, targetX, clampedY, false);
-        }
-        // At 1x (scale <= 1.02): gestureState is SWIPE -> Embla handles carousel drag
-      }
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      if (!isActive) return;
-      onTouchActivity?.();
-
-      // PINCH END
-      if (gestureStateRef.current === GestureState.PINCH) {
-        if (e.touches.length === 0) {
-          gestureStateRef.current = GestureState.IDLE;
-          suppressClickUntilRef.current = Date.now() + 400;
-          lastTapTimeRef.current = 0; // Prevent pinch release from triggering double-tap!
-
-          e.preventDefault();
-          e.stopPropagation();
-
-          if (currentScaleRef.current <= 1.02) {
-            handleResetZoom(true);
-          } else {
-            // Keep current zoom level, clamp boundaries
-            const rect = container.getBoundingClientRect();
-            const scale = currentScaleRef.current;
-            const maxX = Math.max(0, (rect.width * (scale - 1)) / 2);
-            const maxY = Math.max(0, (rect.height * (scale - 1)) / 2);
-
-            const clampedX = Math.max(-maxX, Math.min(maxX, currentTranslateRef.current.x));
-            const clampedY = Math.max(-maxY, Math.min(maxY, currentTranslateRef.current.y));
-
-            currentTranslateRef.current = { x: clampedX, y: clampedY };
-            applyTransform(scale, clampedX, clampedY, true);
-            setIsZoomed(true);
-            onZoomChange?.(true);
-          }
-          return;
-        } else if (e.touches.length === 1) {
-          // Transition from pinch to single-finger pan
-          gestureStateRef.current = GestureState.PAN;
-          panHasMovedRef.current = true;
-          panBoundaryOverflowXRef.current = 0;
-          const t = e.touches[0];
-          panStartTouchRef.current = { x: t.clientX, y: t.clientY };
-          panStartTranslateRef.current = { ...currentTranslateRef.current };
-          return;
-        }
-      }
-
-      // PAN / SWIPE / TAP END
-      if (e.touches.length === 0) {
-        const wasPan = gestureStateRef.current === GestureState.PAN;
-        gestureStateRef.current = GestureState.IDLE;
-
-        // Check if this was a clean single tap (not a drag/swipe)
-        const isTap = !panHasMovedRef.current && (Date.now() - touchStartTimeRef.current < 300);
-
-        if (isTap && e.changedTouches.length === 1) {
-          const touch = e.changedTouches[0];
-          const now = Date.now();
-          const timeDiff = now - lastTapTimeRef.current;
-          const distFromLastTap = Math.hypot(
-            touch.clientX - lastTapPosRef.current.x,
-            touch.clientY - lastTapPosRef.current.y
-          );
-
-          if (timeDiff > 40 && timeDiff < 350 && distFromLastTap < 45) {
-            // CRITICAL: DOUBLE-TAP CONFIRMED!
-            // 1x -> 2.5x, or 2.5x -> 1x (resets scale=1, panX=0, panY=0)
-            e.preventDefault();
-            e.stopPropagation();
-            suppressClickUntilRef.current = now + 400;
-            lastTapTimeRef.current = 0;
-            lastTapPosRef.current = { x: 0, y: 0 };
-            handleToggleZoom(touch.clientX, touch.clientY);
-            return;
-          } else {
-            // First tap of potential double-tap
-            lastTapTimeRef.current = now;
-            lastTapPosRef.current = { x: touch.clientX, y: touch.clientY };
-            return;
-          }
-        }
-
-        // Drag/move occurred: reset tap tracking so drag never triggers double-tap
-        lastTapTimeRef.current = 0;
-
-        if (wasPan && currentScaleRef.current > 1.02) {
-          e.preventDefault();
-          e.stopPropagation();
-          suppressClickUntilRef.current = Date.now() + 300;
-
-          const overflowX = panBoundaryOverflowXRef.current;
-          panBoundaryOverflowXRef.current = 0;
-
-          // Transition to gallery navigation if user dragged strongly past horizontal boundary
-          if (overflowX > 60 && totalImages > 1) {
-            handleResetZoom(false);
-            onPrev?.();
-            return;
-          } else if (overflowX < -60 && totalImages > 1) {
-            handleResetZoom(false);
-            onNext?.();
-            return;
-          }
-
-          // Normal pan: snapback within boundaries
-          const rect = container.getBoundingClientRect();
-          const scale = currentScaleRef.current;
-          const maxX = Math.max(0, (rect.width * (scale - 1)) / 2);
-          const maxY = Math.max(0, (rect.height * (scale - 1)) / 2);
-
-          const clampedX = Math.max(-maxX, Math.min(maxX, currentTranslateRef.current.x));
-          const clampedY = Math.max(-maxY, Math.min(maxY, currentTranslateRef.current.y));
-
-          currentTranslateRef.current = { x: clampedX, y: clampedY };
-          applyTransform(scale, clampedX, clampedY, true);
-        }
-      }
-    };
-
-    const onTouchCancel = () => {
-      gestureStateRef.current = GestureState.IDLE;
-      lastTapTimeRef.current = 0;
-      panBoundaryOverflowXRef.current = 0;
-      if (currentScaleRef.current <= 1.02) {
-        handleResetZoom(false);
-      }
-    };
-
-    // Prevent desktop trackpad pinch-to-zoom or mouse wheel zoom inside Lightbox
-    const onWheel = (e: WheelEvent) => {
-      if (isLightbox && window.innerWidth >= 768) {
-        if (e.ctrlKey) {
-          e.preventDefault();
-        }
-      }
-    };
-
-    container.addEventListener('gesturestart', onGesture, { passive: false });
-    container.addEventListener('gesturechange', onGesture, { passive: false });
-    container.addEventListener('gestureend', onGesture, { passive: false });
-    container.addEventListener('touchstart', onTouchStart, { passive: false });
-    container.addEventListener('touchmove', onTouchMove, { passive: false });
-    container.addEventListener('touchend', onTouchEnd, { passive: false });
-    container.addEventListener('touchcancel', onTouchCancel, { passive: false });
-    container.addEventListener('wheel', onWheel, { passive: false });
-
-    return () => {
-      container.removeEventListener('gesturestart', onGesture);
-      container.removeEventListener('gesturechange', onGesture);
-      container.removeEventListener('gestureend', onGesture);
-      container.removeEventListener('touchstart', onTouchStart);
-      container.removeEventListener('touchmove', onTouchMove);
-      container.removeEventListener('touchend', onTouchEnd);
-      container.removeEventListener('touchcancel', onTouchCancel);
-      container.removeEventListener('wheel', onWheel);
-    };
-  }, [isActive, isLightbox, totalImages, handleResetZoom, handleToggleZoom, applyTransform, onZoomChange, onCancelDrag, onTouchActivity, onPrev, onNext]);
-
-  return (
-    <div
-      ref={containerRef}
-      onClick={(e) => {
-        if (Date.now() < suppressClickUntilRef.current || currentScaleRef.current > 1.02) {
-          e.stopPropagation();
-          e.preventDefault();
-          return;
-        }
-        onSlideClick(e);
-      }}
-      onDoubleClick={(e) => {
-        if (isLightbox) {
-          e.stopPropagation();
-          // Strictly disable double-click zoom on desktop (md: breakpoint >= 768px)
-          if (typeof window !== 'undefined' && window.innerWidth >= 768) {
-            return;
-          }
-          handleToggleZoom(e.clientX, e.clientY);
-        }
-      }}
-      className="flex-[0_0_100%] min-w-0 h-full w-full relative overflow-hidden p-0 m-0 flex items-center justify-center bg-black select-none"
-      style={{
-        width: '100%',
-        height: '100%',
-        backgroundColor: '#000000',
-        touchAction: isLightbox ? (isDesktop ? 'pan-y' : (isZoomed ? 'none' : 'pan-y')) : 'pan-y',
-        cursor: isLightbox
-          ? isDesktop
-            ? totalImages > 1
-              ? 'pointer'
-              : 'default'
-            : isZoomed
-              ? 'grab'
-              : 'default'
-          : 'pointer',
-      }}
-    >
-      {/* Sleek Skeleton / Blur dark placeholder during initial download */}
-      {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-950 z-0 pointer-events-none">
-          <div className="w-full h-full bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 animate-pulse flex items-center justify-center">
-            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 border-white/10 border-t-white/70 animate-spin" />
-          </div>
-        </div>
-      )}
-
-      {isPreloadAllowed && (
-        <div
-          ref={wrapperRef}
-          className="w-full h-full flex items-center justify-center relative will-change-transform"
-          style={{
-            width: '100%',
-            height: '100%',
-            transformOrigin: 'center center',
-          }}
-        >
-          <img
-            ref={imgRef}
-            src={slide.src}
-            alt={`${safeTitle} - ${slide.originalIndex + 1}`}
-            loading={isActive ? 'eager' : 'lazy'}
-            fetchPriority={isActive ? 'high' : 'auto'}
-            decoding="async"
-            referrerPolicy="no-referrer"
-            draggable={false}
-            onLoad={() => setIsLoaded(true)}
-            onError={(e) => {
-              handleImageLoadError(e.currentTarget);
-              setIsLoaded(true);
-            }}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectPosition: 'center',
-            }}
-            className={`w-full h-full select-none pointer-events-none relative z-10 block mx-auto object-center drop-shadow-md transition-opacity duration-300 ${
-              isLoaded ? 'opacity-100' : 'opacity-0'
-            } ${
-              isLightbox
-                ? 'object-contain p-2 sm:p-4'
-                : 'object-cover md:object-contain p-0'
-            }`}
-          />
-        </div>
-      )}
-    </div>
-  );
-});
 
 export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   images,
@@ -637,295 +32,384 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
 
   const totalImages = imagesList.length;
 
-  const isSlideZoomedRef = useRef(false);
-  const [isSlideZoomed, setIsSlideZoomed] = useState(false);
-  const lastTouchTimeRef = useRef<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
 
-  const handleZoomChange = useCallback((zoomed: boolean) => {
-    isSlideZoomedRef.current = zoomed;
-    setIsSlideZoomed(zoomed);
-  }, []);
+  // States & Refs for smooth Turbo.az touch & mouse slider
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startYRef = useRef(0);
+  const currentTranslateRef = useRef(0);
+  const diffRef = useRef(0);
+  const dragStartTimeRef = useRef(0);
+  const isHorizontalDragRef = useRef<boolean | null>(null);
 
-  const recordTouchActivity = useCallback(() => {
-    lastTouchTimeRef.current = Date.now();
-  }, []);
+  // Measure container width with ResizeObserver
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-  // Embla Carousel with true infinite loop mode (zero rewind)
-  const [emblaRef, emblaApi] = useEmblaCarousel({
-    loop: totalImages > 1,
-    skipSnaps: false,
-    duration: 35, // Smooth slide transition ~320-350ms (replaces abrupt 25)
-    startIndex: activeImageIndex || 0,
-    watchDrag: (embla, evt) => {
-      if (totalImages <= 1) return false;
-      if (isLightbox && isSlideZoomedRef.current) return false;
-      if ('touches' in evt && (evt as TouchEvent).touches && (evt as TouchEvent).touches.length > 1) {
-        return false;
+    const updateWidth = () => {
+      if (container) {
+        const w = container.clientWidth;
+        if (w > 0) {
+          setContainerWidth(w);
+        }
       }
-      return true;
-    },
-  });
-
-  const handleCancelDrag = useCallback(() => {
-    if (emblaApi) {
-      emblaApi.scrollTo(activeImageIndex, false);
-    }
-  }, [emblaApi, activeImageIndex]);
-
-  // Re-init or update drag watching dynamically when zoom state changes
-  useEffect(() => {
-    if (!emblaApi) return;
-    emblaApi.reInit();
-  }, [emblaApi, isSlideZoomed]);
-
-  // Reset zoom state on active index change
-  useEffect(() => {
-    isSlideZoomedRef.current = false;
-    setIsSlideZoomed(false);
-  }, [activeImageIndex]);
-
-  // Infinite loop slides list:
-  // Embla requires at least 3 slides in track for loop mode. For 2 images, duplicate to 4.
-  const displaySlides = useMemo(() => {
-    if (totalImages === 0) return [];
-    if (totalImages === 1) {
-      return [{ src: getValidImageUrl(imagesList[0]), originalIndex: 0 }];
-    }
-    if (totalImages === 2) {
-      return [
-        { src: getValidImageUrl(imagesList[0]), originalIndex: 0 },
-        { src: getValidImageUrl(imagesList[1]), originalIndex: 1 },
-        { src: getValidImageUrl(imagesList[0]), originalIndex: 0 },
-        { src: getValidImageUrl(imagesList[1]), originalIndex: 1 },
-      ];
-    }
-    return imagesList.map((url, idx) => ({
-      src: getValidImageUrl(url),
-      originalIndex: idx,
-    }));
-  }, [imagesList, totalImages]);
-
-  // Preload neighboring images (current, next 2, previous 1) in background
-  const [loadedIndices, setLoadedIndices] = useState<Set<number>>(() => {
-    const current = ((activeImageIndex % totalImages) + totalImages) % totalImages;
-    const initial = new Set<number>([current]);
-    if (totalImages > 1) {
-      initial.add((current + 1) % totalImages);
-      initial.add((current + 2) % totalImages);
-      initial.add((current - 1 + totalImages) % totalImages);
-    }
-    return initial;
-  });
-
-  useEffect(() => {
-    if (totalImages === 0) return;
-
-    // 1. Prefetch via new Image() in invisible background cache
-    prefetchCarouselWindow(imagesList, activeImageIndex);
-
-    // 2. Expand loadedIndices in component state so DOM <img> elements are present
-    setLoadedIndices((prev) => {
-      const current = ((activeImageIndex % totalImages) + totalImages) % totalImages;
-      const next1 = (current + 1) % totalImages;
-      const next2 = (current + 2) % totalImages;
-      const prev1 = (current - 1 + totalImages) % totalImages;
-
-      if (
-        prev.has(current) &&
-        prev.has(next1) &&
-        prev.has(next2) &&
-        prev.has(prev1)
-      ) {
-        return prev;
-      }
-
-      const updated = new Set(prev);
-      updated.add(current);
-      if (totalImages > 1) {
-        updated.add(next1);
-        updated.add(next2);
-        updated.add(prev1);
-      }
-      return updated;
-    });
-  }, [activeImageIndex, totalImages, imagesList]);
-
-  // Sync internal slide selection to parent state
-  const onSelect = useCallback(() => {
-    if (!emblaApi) return;
-    const snap = emblaApi.selectedScrollSnap();
-    const logical = totalImages > 0 ? (snap % totalImages) : 0;
-    if (logical !== activeImageIndex) {
-      isSlideZoomedRef.current = false;
-      setIsSlideZoomed(false);
-      onIndexChange(logical);
-    }
-  }, [emblaApi, totalImages, activeImageIndex, onIndexChange]);
-
-  useEffect(() => {
-    if (!emblaApi) return;
-    emblaApi.on('select', onSelect);
-    emblaApi.on('reInit', onSelect);
-    return () => {
-      emblaApi.off('select', onSelect);
-      emblaApi.off('reInit', onSelect);
     };
-  }, [emblaApi, onSelect]);
 
-  // Sync external activeImageIndex change into Embla Carousel
+    updateWidth();
+
+    const ro = new ResizeObserver(() => {
+      updateWidth();
+    });
+    ro.observe(container);
+
+    return () => ro.disconnect();
+  }, []);
+
+  // Preload neighboring images in background
   useEffect(() => {
-    if (!emblaApi || totalImages <= 1) return;
-    const currentSnap = emblaApi.selectedScrollSnap();
-    const currentLogical = currentSnap % totalImages;
-    if (currentLogical !== activeImageIndex) {
-      if (totalImages === 2) {
-        const candidate1 = activeImageIndex;
-        const candidate2 = activeImageIndex + 2;
-        const diff1 = Math.abs(currentSnap - candidate1);
-        const diff2 = Math.abs(currentSnap - candidate2);
-        emblaApi.scrollTo(diff1 <= diff2 ? candidate1 : candidate2, false);
-      } else {
-        emblaApi.scrollTo(activeImageIndex, false);
+    if (totalImages > 0) {
+      prefetchCarouselWindow(imagesList, activeImageIndex);
+    }
+  }, [imagesList, activeImageIndex, totalImages]);
+
+  // Navigate to slide
+  const goToSlide = useCallback((newIndex: number) => {
+    const clampedIndex = Math.max(0, Math.min(totalImages - 1, newIndex));
+    onIndexChange(clampedIndex);
+    const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
+    if (trackRef.current && width > 0) {
+      trackRef.current.style.transform = `translateX(${-clampedIndex * width}px)`;
+    }
+  }, [totalImages, onIndexChange, containerWidth]);
+
+  // Synchronize track position when activeImageIndex or containerWidth changes (when not dragging)
+  useEffect(() => {
+    if (isDraggingRef.current) return;
+    const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
+    if (trackRef.current && width > 0) {
+      trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
+    }
+  }, [activeImageIndex, containerWidth]);
+
+  // On Drag Start
+  const onDragStart = useCallback((clientX: number, clientY: number) => {
+    if (totalImages <= 1) return;
+    const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
+    if (width <= 0) return;
+
+    isDraggingRef.current = true;
+    startXRef.current = clientX;
+    startYRef.current = clientY;
+    diffRef.current = 0;
+    dragStartTimeRef.current = Date.now();
+    isHorizontalDragRef.current = null;
+    currentTranslateRef.current = -activeImageIndex * width;
+
+    if (trackRef.current) {
+      trackRef.current.classList.add('dragging');
+    }
+  }, [activeImageIndex, totalImages, containerWidth]);
+
+  // On Drag Move
+  const onDragMove = useCallback((clientX: number, clientY: number, e?: TouchEvent | MouseEvent) => {
+    if (!isDraggingRef.current) return;
+
+    const dx = clientX - startXRef.current;
+    const dy = clientY - startYRef.current;
+
+    // Detect direction intent on first few pixels
+    if (isHorizontalDragRef.current === null) {
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+        isHorizontalDragRef.current = Math.abs(dx) >= Math.abs(dy);
       }
     }
-  }, [emblaApi, activeImageIndex, totalImages]);
 
-  // Re-init carousel when imagesList changes
-  useEffect(() => {
-    if (emblaApi) {
-      emblaApi.reInit();
+    // User is scrolling vertically, cancel slider drag so page scrolls natively
+    if (isHorizontalDragRef.current === false) {
+      if (trackRef.current) {
+        trackRef.current.classList.remove('dragging');
+        const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
+        trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
+      }
+      isDraggingRef.current = false;
+      return;
     }
-  }, [emblaApi, displaySlides]);
 
-  // Button navigation handlers
+    if (isHorizontalDragRef.current === true && e && e.cancelable) {
+      e.preventDefault();
+    }
+
+    let diff = dx;
+    // Rubber-band resistance if dragging past first or last slide
+    if (activeImageIndex === 0 && diff > 0) {
+      diff = diff * 0.35;
+    } else if (activeImageIndex === totalImages - 1 && diff < 0) {
+      diff = diff * 0.35;
+    }
+
+    diffRef.current = diff;
+
+    if (trackRef.current) {
+      trackRef.current.style.transform = `translateX(${currentTranslateRef.current + diff}px)`;
+    }
+  }, [activeImageIndex, totalImages, containerWidth]);
+
+  // On Drag End
+  const onDragEnd = useCallback(() => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+
+    const diff = diffRef.current;
+    const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
+    const threshold = width * 0.25;
+
+    if (trackRef.current) {
+      trackRef.current.classList.remove('dragging');
+    }
+
+    const elapsed = Date.now() - dragStartTimeRef.current;
+    const isQuickFlick = elapsed < 280 && Math.abs(diff) > 35;
+
+    if (Math.abs(diff) < threshold && !isQuickFlick) {
+      // Snap back smoothly
+      if (trackRef.current) {
+        trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
+      }
+    } else {
+      // Go to next or prev
+      if (diff < 0) {
+        // Next slide
+        if (activeImageIndex < totalImages - 1) {
+          goToSlide(activeImageIndex + 1);
+        } else {
+          // At end: snap back with rubber-band recovery
+          if (trackRef.current) {
+            trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
+          }
+        }
+      } else {
+        // Prev slide
+        if (activeImageIndex > 0) {
+          goToSlide(activeImageIndex - 1);
+        } else {
+          // At start: snap back with rubber-band recovery
+          if (trackRef.current) {
+            trackRef.current.style.transform = `translateX(0px)`;
+          }
+        }
+      }
+    }
+
+    // Reset after a brief delay so click handlers can inspect diffRef
+    setTimeout(() => {
+      diffRef.current = 0;
+      isHorizontalDragRef.current = null;
+    }, 50);
+  }, [activeImageIndex, totalImages, containerWidth, goToSlide]);
+
+  const onDragCancel = useCallback(() => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
+    if (trackRef.current) {
+      trackRef.current.classList.remove('dragging');
+      trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
+    }
+    diffRef.current = 0;
+    isHorizontalDragRef.current = null;
+  }, [activeImageIndex, containerWidth]);
+
+  // Attach non-passive touch listeners to container for silky smooth mobile gesture
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        onDragStart(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        onDragMove(e.touches[0].clientX, e.touches[0].clientY, e);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      onDragEnd();
+    };
+
+    const handleTouchCancel = () => {
+      onDragCancel();
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchCancel);
+    };
+  }, [onDragStart, onDragMove, onDragEnd, onDragCancel]);
+
+  // Desktop Mouse Drag Handling
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // only left-click
+    onDragStart(e.clientX, e.clientY);
+
+    const handleMouseMove = (me: MouseEvent) => {
+      onDragMove(me.clientX, me.clientY, me);
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      onDragEnd();
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Button navigation
   const handlePrev = useCallback((e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
-    if (emblaApi) {
-      emblaApi.scrollPrev(false);
+    if (activeImageIndex > 0) {
+      goToSlide(activeImageIndex - 1);
+    } else if (totalImages > 1) {
+      goToSlide(totalImages - 1);
     }
-  }, [emblaApi]);
+  }, [activeImageIndex, totalImages, goToSlide]);
 
   const handleNext = useCallback((e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
-    if (emblaApi) {
-      emblaApi.scrollNext(false);
+    if (activeImageIndex < totalImages - 1) {
+      goToSlide(activeImageIndex + 1);
+    } else if (totalImages > 1) {
+      goToSlide(0);
     }
-  }, [emblaApi]);
+  }, [activeImageIndex, totalImages, goToSlide]);
 
-  // Track pointer distance to distinguish a clean click/tap from a swipe drag
-  const isPointerDownRef = useRef<boolean>(false);
-  const dragDistanceRef = useRef<number>(0);
-  const startXRef = useRef<number>(0);
-  const startYRef = useRef<number>(0);
+  // Keyboard navigation
+  useEffect(() => {
+    if (disabledKeyNav || totalImages <= 1) return;
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.pointerType === 'touch') {
-      lastTouchTimeRef.current = Date.now();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrev();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNext();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [disabledKeyNav, totalImages, handlePrev, handleNext]);
+
+  // Slide click handler (Lightbox opening / zoom / next-prev)
+  const handleSlideClick = (index: number, e: React.MouseEvent) => {
+    // If was dragged, do not trigger click
+    if (Math.abs(diffRef.current) >= 6) {
+      e.stopPropagation();
+      e.preventDefault();
+      return;
     }
-    isPointerDownRef.current = true;
-    dragDistanceRef.current = 0;
-    startXRef.current = e.clientX;
-    startYRef.current = e.clientY;
-  };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isPointerDownRef.current) return;
-    const dx = Math.abs(e.clientX - startXRef.current);
-    const dy = Math.abs(e.clientY - startYRef.current);
-    dragDistanceRef.current = Math.max(dragDistanceRef.current, Math.sqrt(dx * dx + dy * dy));
-  };
-
-  const handlePointerUp = () => {
-    isPointerDownRef.current = false;
-  };
-
-  // Open Lightbox only when clicked without dragging, synchronizing clicked index.
-  // In Lightbox, clicking left ~40% navigates to prev, right ~40% navigates to next.
-  const handleSlideClick = useCallback((slideIndex: number) => (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    if (dragDistanceRef.current < 8) {
-      if (isLightbox) {
-        // Mobile / touch devices navigate via horizontal swipe, not image click.
-        // Ignore click events initiated by touch within the last 800ms.
-        const isRecentTouch = Date.now() - lastTouchTimeRef.current < 800;
-        if (isRecentTouch) {
-          return;
-        }
-
-        if (totalImages > 1) {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const clickX = e.clientX - rect.left;
-          const ratio = rect.width > 0 ? clickX / rect.width : 0.5;
-          if (ratio <= 0.4) {
-            handlePrev(e);
-          } else if (ratio >= 0.6) {
-            handleNext(e);
-          }
-        }
-      } else {
-        onIndexChange(slideIndex);
-        if (onImageClick) {
-          onImageClick(slideIndex);
+    if (isLightbox) {
+      if (totalImages > 1) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const ratio = rect.width > 0 ? clickX / rect.width : 0.5;
+        if (ratio <= 0.35) {
+          handlePrev(e);
+        } else if (ratio >= 0.65) {
+          handleNext(e);
         }
       }
+    } else {
+      if (onImageClick) {
+        onImageClick(index);
+      }
     }
-  }, [isLightbox, totalImages, handlePrev, handleNext, onIndexChange, onImageClick]);
+  };
 
   return (
     <div
-      className={`relative select-none overflow-hidden block ${
+      ref={containerRef}
+      onMouseDown={handleMouseDown}
+      className={`relative select-none overflow-hidden block touch-pan-y ${
         isLightbox
-          ? 'h-full w-full flex-1 min-h-0 bg-black'
-          : `group ${className || 'bg-black w-full aspect-[4/3] md:aspect-auto md:h-[500px] mx-auto flex items-center justify-center'}`
+          ? 'h-full w-full flex-1 min-h-0 bg-black cursor-default'
+          : `group ${className || 'bg-black w-full aspect-[4/3] md:aspect-auto md:h-[500px] mx-auto flex items-center justify-center'} cursor-grab active:cursor-grabbing`
       }`}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      style={{
-        backgroundColor: '#000000',
-      }}
+      style={{ backgroundColor: '#000000' }}
     >
-      {/* Embla Viewport */}
-      <div 
-        className={`overflow-hidden w-full h-full bg-black ${
-          isLightbox 
-            ? totalImages > 1 ? 'cursor-pointer' : 'cursor-default' 
-            : 'cursor-grab active:cursor-grabbing'
-        }`} 
-        ref={emblaRef}
+      {/* Smooth Slider Track */}
+      <div
+        ref={trackRef}
+        className="slider-track flex h-full w-full bg-black"
+        style={{
+          transform: containerWidth > 0 ? `translateX(${-activeImageIndex * containerWidth}px)` : 'translateX(0px)',
+        }}
       >
-        <div 
-          className="flex h-full w-full touch-pan-y will-change-transform bg-black"
-        >
-          {displaySlides.map((slide, index) => {
-            const isPreloadAllowed = loadedIndices.has(slide.originalIndex);
+        {imagesList.map((imgSrc, index) => {
+          const isCurrentOrNeighbor =
+            index === activeImageIndex ||
+            index === (activeImageIndex + 1) % totalImages ||
+            index === (activeImageIndex - 1 + totalImages) % totalImages;
 
-            return (
-              <SlideItem
-                key={`${slide.originalIndex}-${index}`}
-                slide={slide}
-                activeImageIndex={activeImageIndex}
-                totalImages={totalImages}
-                safeTitle={safeTitle}
-                isLightbox={isLightbox}
-                isPreloadAllowed={isPreloadAllowed}
-                onSlideClick={handleSlideClick(slide.originalIndex)}
-                onZoomChange={handleZoomChange}
-                onCancelDrag={handleCancelDrag}
-                onTouchActivity={recordTouchActivity}
-                onPrev={handlePrev}
-                onNext={handleNext}
-              />
-            );
-          })}
-        </div>
+          return (
+            <div
+              key={`${index}-${imgSrc}`}
+              onClick={(e) => handleSlideClick(index, e)}
+              className="w-full h-full shrink-0 flex items-center justify-center overflow-hidden relative bg-black select-none"
+              style={{ width: containerWidth > 0 ? `${containerWidth}px` : '100%' }}
+            >
+              {isCurrentOrNeighbor ? (
+                <img
+                  src={getValidImageUrl(imgSrc)}
+                  alt={`${safeTitle} - ${index + 1}`}
+                  loading={index === 0 ? 'eager' : 'lazy'}
+                  decoding="async"
+                  onError={(e) => {
+                    handleImageLoadError(e.currentTarget);
+                  }}
+                  className={`select-none pointer-events-none block mx-auto drop-shadow-md ${
+                    isLightbox
+                      ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
+                      : 'w-full h-full object-cover md:object-contain'
+                  }`}
+                  style={{
+                    width: isLightbox ? 'auto' : '100%',
+                    height: isLightbox ? 'auto' : '100%',
+                    objectPosition: 'center',
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full bg-black flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full border-2 border-slate-700 border-t-blue-500 animate-spin" />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Turbo.az Image Controls: Bottom-Center Counter & Bottom-Right "Bütün şəkillər" Button */}
@@ -961,7 +445,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
         </>
       )}
 
-      {/* Turbo.az Desktop Ox Düymələri (Non-lightbox desktop rejimində hover zamanı görünür, lightbox-da və mobildə həmişə aktivdir) */}
+      {/* Turbo.az Desktop Ox Düymələri */}
       {totalImages > 1 && (
         <>
           <button

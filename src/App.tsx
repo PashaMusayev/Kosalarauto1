@@ -532,7 +532,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-['-apple-system','BlinkMacSystemFont','Segoe_UI','Roboto','Helvetica_Neue',Arial,sans-serif]">
       
       {/* Header */}
       <Header
