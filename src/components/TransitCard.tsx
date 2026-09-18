@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Heart } from 'lucide-react';
 import { TransitCar } from '../types';
 import { prefetchImages } from '../utils/imagePreloader';
-import { CardImageCarousel } from './CardImageCarousel';
+import { getValidImageUrl, handleImageLoadError } from '../utils/imageFallback';
 
 interface TransitCardProps {
   car: TransitCar;
@@ -28,6 +28,16 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
   const safeLocation = car?.city || car?.location || 'Bakı';
   const safeBaseLength = car?.baseLength || '';
 
+  const primaryImageUrl = getValidImageUrl(car?.primaryImage || (car?.images && car.images[0]));
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setImageLoaded(true);
+    }
+  }, [primaryImageUrl]);
+
   // Arxa fonda elanın digər şəkillərini qabaqcadan kesə yüklə (hover / touch anında)
   const handlePrefetch = () => {
     if (car) {
@@ -45,19 +55,37 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
       onMouseEnter={handlePrefetch}
       onTouchStart={handlePrefetch}
     >
-      {/* Top Image Section (Turbo.az Style 4:3 Aspect, Mobile Touch Carousel & Desktop Controls) */}
-      <CardImageCarousel
-        carId={car?.id || 'card'}
-        images={car?.images}
-        primaryImage={car?.primaryImage}
-        safeTitle={safeTitle}
-        priority={priority}
-        onCardClick={() => onViewDetails(car)}
-      >
+      {/* Top Image Section (Turbo.az Style 4:3 Aspect, Static Primary Image) */}
+      <div className="relative aspect-[4/3] bg-slate-100 overflow-hidden flex items-center justify-center select-none">
+        {/* Shimmer loading state if image not loaded yet */}
+        {!imageLoaded && (
+          <div className="absolute inset-0 bg-slate-100 overflow-hidden pointer-events-none z-0">
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-100 via-slate-200/80 to-slate-100 animate-shimmer" />
+          </div>
+        )}
+
+        <img
+          ref={imgRef}
+          src={primaryImageUrl}
+          alt={safeTitle}
+          referrerPolicy="no-referrer"
+          draggable={false}
+          onLoad={() => setImageLoaded(true)}
+          onError={(e) => {
+            handleImageLoadError(e.currentTarget);
+            setImageLoaded(true);
+          }}
+          className={`w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300 relative z-[1] select-none ${
+            imageLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'auto'}
+          decoding="async"
+        />
+
         {/* Favorite Button (Heart) */}
         <button
           type="button"
-          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             if (car?.id) onToggleFavorite(car.id);
@@ -79,7 +107,7 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
             {safeBaseLength}
           </div>
         )}
-      </CardImageCarousel>
+      </div>
 
       {/* Turbo.az Style Compact Card Body */}
       <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between space-y-1">

@@ -797,22 +797,6 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   }, [emblaApi, displaySlides]);
 
-  // Keyboard navigation (ArrowLeft / ArrowRight) with seamless infinite loop
-  useEffect(() => {
-    if (disabledKeyNav || totalImages <= 1) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') {
-        if (emblaApi) emblaApi.scrollNext(false);
-      } else if (e.key === 'ArrowLeft') {
-        if (emblaApi) emblaApi.scrollPrev(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [emblaApi, disabledKeyNav, totalImages]);
-
   // Button navigation handlers
   const handlePrev = useCallback((e?: React.MouseEvent) => {
     if (e) {
