@@ -37,6 +37,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const [containerWidth, setContainerWidth] = useState<number>(0);
 
   // States & Refs for smooth Turbo.az touch & mouse slider
+  const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
   const startXRef = useRef(0);
   const startYRef = useRef(0);
@@ -44,6 +45,39 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const diffRef = useRef(0);
   const dragStartTimeRef = useRef(0);
   const isHorizontalDragRef = useRef<boolean | null>(null);
+
+  // 1. Zoom states for Turbo.az pinch-to-zoom and double-tap zoom
+  const [scale, setScale] = useState(1);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+
+  const scaleRef = useRef(1);
+  const isZoomedRef = useRef(false);
+  const panRef = useRef({ x: 0, y: 0 });
+  const lastTapRef = useRef(0);
+  const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Pinch tracking
+  const pinchStartDistRef = useRef(0);
+  const pinchStartScaleRef = useRef(1);
+  const isPinchingRef = useRef(false);
+
+  // Pan tracking when zoomed
+  const panStartXRef = useRef(0);
+  const panStartYRef = useRef(0);
+  const panStartPosRef = useRef({ x: 0, y: 0 });
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+  const touchStartTimeRef = useRef(0);
+
+  // Reset zoom on active slide change
+  useEffect(() => {
+    setScale(1);
+    scaleRef.current = 1;
+    setIsZoomed(false);
+    isZoomedRef.current = false;
+    setPan({ x: 0, y: 0 });
+    panRef.current = { x: 0, y: 0 };
+  }, [activeImageIndex]);
 
   // Measure container width with ResizeObserver
   useEffect(() => {
@@ -95,13 +129,14 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   }, [activeImageIndex, containerWidth]);
 
-  // On Drag Start
+  // On Drag Start for Slider Track
   const onDragStart = useCallback((clientX: number, clientY: number) => {
     if (totalImages <= 1) return;
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     if (width <= 0) return;
 
     isDraggingRef.current = true;
+    setIsDragging(true);
     startXRef.current = clientX;
     startYRef.current = clientY;
     diffRef.current = 0;
@@ -114,7 +149,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   }, [activeImageIndex, totalImages, containerWidth]);
 
-  // On Drag Move
+  // On Drag Move for Slider Track
   const onDragMove = useCallback((clientX: number, clientY: number, e?: TouchEvent | MouseEvent) => {
     if (!isDraggingRef.current) return;
 
@@ -136,6 +171,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
         trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
       }
       isDraggingRef.current = false;
+      setIsDragging(false);
       return;
     }
 
@@ -158,10 +194,11 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   }, [activeImageIndex, totalImages, containerWidth]);
 
-  // On Drag End
+  // On Drag End for Slider Track
   const onDragEnd = useCallback(() => {
     if (!isDraggingRef.current) return;
     isDraggingRef.current = false;
+    setIsDragging(false);
 
     const diff = diffRef.current;
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
@@ -214,6 +251,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const onDragCancel = useCallback(() => {
     if (!isDraggingRef.current) return;
     isDraggingRef.current = false;
+    setIsDragging(false);
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     if (trackRef.current) {
       trackRef.current.classList.remove('dragging');
@@ -223,35 +261,185 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     isHorizontalDragRef.current = null;
   }, [activeImageIndex, containerWidth]);
 
-  // Attach non-passive touch listeners to container for silky smooth mobile gesture
+  // Touch listener attached with non-passive touchmove for gesture control & zoom
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleTouchStart = (e: TouchEvent) => {
+      // 3. Pinch-zoom with 2 fingers
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        onDragCancel();
+        pinchStartDistRef.current = Math.hypot(
+          e.touches[1].clientX - e.touches[0].clientX,
+          e.touches[1].clientY - e.touches[0].clientY
+        );
+        pinchStartScaleRef.current = scaleRef.current;
+        isPinchingRef.current = true;
+        isDraggingRef.current = true;
+        setIsDragging(true);
+        return;
+      }
+
       if (e.touches.length === 1) {
-        onDragStart(e.touches[0].clientX, e.touches[0].clientY);
+        const touch = e.touches[0];
+        touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+        touchStartTimeRef.current = Date.now();
+
+        // When zoomed, 1 finger pans the zoomed image, NOT changing slide
+        if (scaleRef.current > 1.05) {
+          isDraggingRef.current = true;
+          setIsDragging(true);
+          panStartXRef.current = touch.clientX;
+          panStartYRef.current = touch.clientY;
+          panStartPosRef.current = { ...panRef.current };
+          return;
+        }
+
+        // Standard slider swipe
+        onDragStart(touch.clientX, touch.clientY);
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
+      // Pinching with 2 fingers
+      if (e.touches.length === 2 && isPinchingRef.current) {
+        e.preventDefault();
+        const currentDist = Math.hypot(
+          e.touches[1].clientX - e.touches[0].clientX,
+          e.touches[1].clientY - e.touches[0].clientY
+        );
+        if (pinchStartDistRef.current > 0) {
+          let newScale = pinchStartScaleRef.current * (currentDist / pinchStartDistRef.current);
+          newScale = Math.max(1, Math.min(3.5, newScale));
+          scaleRef.current = newScale;
+          setScale(newScale);
+          if (newScale > 1.05) {
+            isZoomedRef.current = true;
+            setIsZoomed(true);
+          } else {
+            isZoomedRef.current = false;
+            setIsZoomed(false);
+            setPan({ x: 0, y: 0 });
+            panRef.current = { x: 0, y: 0 };
+          }
+        }
+        return;
+      }
+
       if (e.touches.length === 1) {
-        onDragMove(e.touches[0].clientX, e.touches[0].clientY, e);
+        const touch = e.touches[0];
+
+        // When zoomed, pan within the zoomed image
+        if (scaleRef.current > 1.05) {
+          e.preventDefault();
+          const dx = touch.clientX - panStartXRef.current;
+          const dy = touch.clientY - panStartYRef.current;
+
+          const containerH = container.clientHeight || 400;
+          const maxX = Math.max(0, (containerWidth * (scaleRef.current - 1)) / 2);
+          const maxY = Math.max(0, (containerH * (scaleRef.current - 1)) / 2);
+
+          const newPanX = Math.max(-maxX, Math.min(maxX, panStartPosRef.current.x + dx));
+          const newPanY = Math.max(-maxY, Math.min(maxY, panStartPosRef.current.y + dy));
+
+          panRef.current = { x: newPanX, y: newPanY };
+          setPan({ x: newPanX, y: newPanY });
+          return;
+        }
+
+        // Standard slider drag
+        onDragMove(touch.clientX, touch.clientY, e);
       }
     };
 
-    const handleTouchEnd = () => {
+    const handleTouchEnd = (e: TouchEvent) => {
+      // Pinch end
+      if (isPinchingRef.current) {
+        isPinchingRef.current = false;
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        if (scaleRef.current <= 1.05) {
+          setScale(1);
+          scaleRef.current = 1;
+          setIsZoomed(false);
+          isZoomedRef.current = false;
+          setPan({ x: 0, y: 0 });
+          panRef.current = { x: 0, y: 0 };
+        }
+        return;
+      }
+
+      const touch = e.changedTouches[0];
+      const now = Date.now();
+      const distFromStart = touch
+        ? Math.hypot(touch.clientX - touchStartPosRef.current.x, touch.clientY - touchStartPosRef.current.y)
+        : 0;
+
+      // 2. Double-tap to zoom:
+      // If time since last tap < 300ms and diff < 10px, toggle zoom
+      if (distFromStart < 10 && (now - touchStartTimeRef.current < 300)) {
+        if (now - lastTapRef.current < 300) {
+          // Double-tap confirmed!
+          if (singleTapTimeoutRef.current) {
+            clearTimeout(singleTapTimeoutRef.current);
+            singleTapTimeoutRef.current = null;
+          }
+          lastTapRef.current = 0;
+
+          if (!isZoomedRef.current) {
+            // Zoom in
+            setScale(2.5);
+            scaleRef.current = 2.5;
+            setIsZoomed(true);
+            isZoomedRef.current = true;
+            setPan({ x: 0, y: 0 });
+            panRef.current = { x: 0, y: 0 };
+          } else {
+            // Zoom out
+            setScale(1);
+            scaleRef.current = 1;
+            setIsZoomed(false);
+            isZoomedRef.current = false;
+            setPan({ x: 0, y: 0 });
+            panRef.current = { x: 0, y: 0 };
+          }
+
+          onDragCancel();
+          return;
+        } else {
+          lastTapRef.current = now;
+          // Trigger onImageClick if single tap confirmed
+          if (!isZoomedRef.current && !isLightbox && onImageClick) {
+            singleTapTimeoutRef.current = setTimeout(() => {
+              onImageClick(activeImageIndex);
+              singleTapTimeoutRef.current = null;
+            }, 280);
+          }
+        }
+      }
+
+      if (scaleRef.current > 1.05) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        return;
+      }
+
       onDragEnd();
     };
 
     const handleTouchCancel = () => {
+      isPinchingRef.current = false;
+      isDraggingRef.current = false;
+      setIsDragging(false);
       onDragCancel();
     };
 
-    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd, { passive: true });
-    container.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+    container.addEventListener('touchend', handleTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', handleTouchCancel, { passive: false });
 
     return () => {
       container.removeEventListener('touchstart', handleTouchStart);
@@ -259,11 +447,47 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchCancel);
     };
-  }, [onDragStart, onDragMove, onDragEnd, onDragCancel]);
+  }, [activeImageIndex, containerWidth, onDragStart, onDragMove, onDragEnd, onDragCancel, isLightbox, onImageClick]);
 
   // Desktop Mouse Drag Handling
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // only left-click
+
+    if (scaleRef.current > 1.05) {
+      // Mouse drag panning when zoomed on desktop
+      isDraggingRef.current = true;
+      setIsDragging(true);
+      panStartXRef.current = e.clientX;
+      panStartYRef.current = e.clientY;
+      panStartPosRef.current = { ...panRef.current };
+
+      const handleMouseMovePan = (me: MouseEvent) => {
+        const dx = me.clientX - panStartXRef.current;
+        const dy = me.clientY - panStartYRef.current;
+        const container = containerRef.current;
+        const containerH = container ? container.clientHeight : 400;
+        const maxX = Math.max(0, (containerWidth * (scaleRef.current - 1)) / 2);
+        const maxY = Math.max(0, (containerH * (scaleRef.current - 1)) / 2);
+
+        const newPanX = Math.max(-maxX, Math.min(maxX, panStartPosRef.current.x + dx));
+        const newPanY = Math.max(-maxY, Math.min(maxY, panStartPosRef.current.y + dy));
+
+        panRef.current = { x: newPanX, y: newPanY };
+        setPan({ x: newPanX, y: newPanY });
+      };
+
+      const handleMouseUpPan = () => {
+        window.removeEventListener('mousemove', handleMouseMovePan);
+        window.removeEventListener('mouseup', handleMouseUpPan);
+        isDraggingRef.current = false;
+        setIsDragging(false);
+      };
+
+      window.addEventListener('mousemove', handleMouseMovePan);
+      window.addEventListener('mouseup', handleMouseUpPan);
+      return;
+    }
+
     onDragStart(e.clientX, e.clientY);
 
     const handleMouseMove = (me: MouseEvent) => {
@@ -280,11 +504,40 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
+  // Double click on desktop to toggle zoom
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!isZoomedRef.current) {
+      setScale(2.5);
+      scaleRef.current = 2.5;
+      setIsZoomed(true);
+      isZoomedRef.current = true;
+      setPan({ x: 0, y: 0 });
+      panRef.current = { x: 0, y: 0 };
+    } else {
+      setScale(1);
+      scaleRef.current = 1;
+      setIsZoomed(false);
+      isZoomedRef.current = false;
+      setPan({ x: 0, y: 0 });
+      panRef.current = { x: 0, y: 0 };
+    }
+  };
+
   // Button navigation
   const handlePrev = useCallback((e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
+    }
+    if (isZoomedRef.current) {
+      setScale(1);
+      scaleRef.current = 1;
+      setIsZoomed(false);
+      isZoomedRef.current = false;
+      setPan({ x: 0, y: 0 });
+      panRef.current = { x: 0, y: 0 };
     }
     if (activeImageIndex > 0) {
       goToSlide(activeImageIndex - 1);
@@ -298,6 +551,14 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       e.stopPropagation();
       e.preventDefault();
     }
+    if (isZoomedRef.current) {
+      setScale(1);
+      scaleRef.current = 1;
+      setIsZoomed(false);
+      isZoomedRef.current = false;
+      setPan({ x: 0, y: 0 });
+      panRef.current = { x: 0, y: 0 };
+    }
     if (activeImageIndex < totalImages - 1) {
       goToSlide(activeImageIndex + 1);
     } else if (totalImages > 1) {
@@ -307,7 +568,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
 
   // Keyboard navigation
   useEffect(() => {
-    if (disabledKeyNav || totalImages <= 1) return;
+    if (disabledKeyNav || totalImages <= 1 || isZoomed) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
@@ -321,12 +582,11 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [disabledKeyNav, totalImages, handlePrev, handleNext]);
+  }, [disabledKeyNav, totalImages, handlePrev, handleNext, isZoomed]);
 
-  // Slide click handler (Lightbox opening / zoom / next-prev)
+  // Slide click handler (Lightbox navigation when not zoomed)
   const handleSlideClick = (index: number, e: React.MouseEvent) => {
-    // If was dragged, do not trigger click
-    if (Math.abs(diffRef.current) >= 6) {
+    if (Math.abs(diffRef.current) >= 6 || isZoomed) {
       e.stopPropagation();
       e.preventDefault();
       return;
@@ -354,12 +614,15 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     <div
       ref={containerRef}
       onMouseDown={handleMouseDown}
-      className={`relative select-none overflow-hidden block touch-pan-y ${
+      onDoubleClick={handleDoubleClick}
+      className={`relative select-none overflow-hidden block ${
         isLightbox
           ? 'h-full w-full flex-1 min-h-0 bg-black cursor-default'
-          : `group ${className || 'bg-black w-full aspect-[4/3] md:aspect-auto md:h-[500px] mx-auto flex items-center justify-center'} cursor-grab active:cursor-grabbing`
+          : `group ${className || 'bg-black w-full aspect-[4/3] md:aspect-auto md:h-[500px] mx-auto flex items-center justify-center'} ${
+              isZoomed ? 'cursor-move' : 'cursor-grab active:cursor-grabbing'
+            }`
       }`}
-      style={{ backgroundColor: '#000000' }}
+      style={{ backgroundColor: '#000000', touchAction: isZoomed ? 'none' : 'pan-y' }}
     >
       {/* Smooth Slider Track */}
       <div
@@ -374,6 +637,8 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
             index === activeImageIndex ||
             index === (activeImageIndex + 1) % totalImages ||
             index === (activeImageIndex - 1 + totalImages) % totalImages;
+
+          const isActiveSlide = index === activeImageIndex;
 
           return (
             <div
@@ -400,6 +665,12 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
                     width: isLightbox ? 'auto' : '100%',
                     height: isLightbox ? 'auto' : '100%',
                     objectPosition: 'center',
+                    transform: isActiveSlide && isZoomed
+                      ? `translate3d(${pan.x}px, ${pan.y}px, 0px) scale(${scale})`
+                      : 'scale(1)',
+                    transition: isDragging ? 'none' : 'transform 300ms ease',
+                    transformOrigin: 'center center',
+                    willChange: 'transform',
                   }}
                 />
               ) : (
