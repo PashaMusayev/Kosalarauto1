@@ -31,7 +31,8 @@ html { scroll-behavior: smooth; }
   transition: transform 350ms cubic-bezier(0.25, 0.1, 0.25, 1)!important;
   will-change: transform;
 }
-.slider-track.dragging {
+.slider-track.dragging,
+.slider-track.no-transition {
   transition: none!important;
 }
 

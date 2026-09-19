@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { X, Heart, Phone, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PHONE_NUMBER } from '../../data/transits';
@@ -37,6 +37,18 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
   const thumbnailRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const thumbnailsContainerRef = useRef<HTMLDivElement>(null);
   const prevIsOpen = useRef(false);
+
+  // Desktop hover preview state (Issue 5: previews thumbnail on mouse hover without permanent change)
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
+  // Reset preview when lightbox closes
+  useEffect(() => {
+    if (!isOpen) {
+      setPreviewIndex(null);
+    }
+  }, [isOpen]);
+
+  const displayedIndex = previewIndex !== null ? previewIndex : activeImageIndex;
 
   // Lightbox açıldıqda aktiv şəklin indeksini qoru və uyğun thumbnail-i görünən sahəyə gətir
   useEffect(() => {
@@ -229,8 +241,11 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
           >
             <TurboImageSlider
               images={imagesList}
-              activeImageIndex={activeImageIndex}
-              onIndexChange={setActiveImageIndex}
+              activeImageIndex={displayedIndex}
+              onIndexChange={(newIdx) => {
+                setPreviewIndex(null);
+                setActiveImageIndex(newIdx);
+              }}
               safeTitle={safeTitle}
               isLightbox={true}
             />
@@ -273,7 +288,7 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
           >
             {/* Tək Yığcam Sayğac (Şəklin tam altında, təkrarsız) */}
             <div className="text-xs text-white/80 font-semibold mb-2.5 tracking-wider select-none">
-              <span>{activeImageIndex + 1}</span>
+              <span>{displayedIndex + 1}</span>
               <span className="text-white/40 mx-1.5">/</span>
               <span>{imagesList.length || 1}</span>
             </div>
@@ -282,29 +297,40 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
             {imagesList.length > 1 && (
               <div 
                 ref={thumbnailsContainerRef}
+                onMouseLeave={() => setPreviewIndex(null)}
                 className={`w-full max-w-5xl overflow-x-auto no-scrollbar py-1 flex items-center gap-2.5 px-4 ${
                   imagesList.length <= 7 ? 'justify-center' : 'justify-start'
                 }`}
               >
                 {imagesList.map((img, idx) => {
-                  const isActive = idx === activeImageIndex;
+                  const isSelected = idx === activeImageIndex;
+                  const isPreview = previewIndex !== null && idx === previewIndex;
+                  const isHighlight = isPreview || (previewIndex === null && isSelected);
+
                   return (
                     <button
                       key={`thumb-desktop-${idx}`}
                       ref={(el) => { thumbnailRefs.current[idx] = el; }}
                       type="button"
-                      onClick={() => setActiveImageIndex(idx)}
+                      onMouseEnter={() => setPreviewIndex(idx)}
+                      onMouseLeave={() => setPreviewIndex(null)}
+                      onClick={() => {
+                        setPreviewIndex(null);
+                        setActiveImageIndex(idx);
+                      }}
                       className={`relative rounded-lg overflow-hidden shrink-0 transition-all cursor-pointer h-14 w-20 border-2 ${
-                        isActive 
+                        isHighlight 
                           ? 'border-[#1D4ED8] ring-2 ring-[#1D4ED8]/60 scale-105 opacity-100 shadow-md z-10' 
-                          : 'border-white/15 opacity-50 hover:opacity-85 hover:scale-100'
+                          : isSelected
+                            ? 'border-white/50 opacity-75'
+                            : 'border-white/15 opacity-50 hover:opacity-85 hover:scale-100'
                       }`}
                       title={`${idx + 1}-ci şəkil`}
                     >
                       <img
                         src={getValidImageUrl(img)}
                         alt={`Önizləmə ${idx + 1}`}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover pointer-events-none select-none"
                         referrerPolicy="no-referrer"
                         loading="lazy"
                       />

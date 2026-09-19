@@ -52,9 +52,9 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const dragStartTimeRef = useRef(0);
   const isHorizontalDragRef = useRef<boolean | null>(null);
 
-  // Wrap-around control to eliminate fly-through animation (Issue 2)
-  const isWrappingRef = useRef(false);
-  const wrapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Touch vs synthetic click tracking (Fixes Issue 3 conflict)
+  const lastTouchTimeRef = useRef(0);
+  const lastDoubleTapTimeRef = useRef(0);
 
   // Zoom states for Turbo.az pinch-to-zoom and double-tap zoom
   const [scale, setScale] = useState(1);
@@ -120,7 +120,20 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   }, [imagesList, activeImageIndex, totalImages]);
 
-  // Navigate to slide with clean boundary handling (Issue 2)
+  // Helper to jump immediately to a slide without fly-through sliding transition (Issue 2)
+  const applyPositionWithoutTransition = useCallback((targetIndex: number) => {
+    const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
+    if (!trackRef.current || width <= 0) return;
+    const track = trackRef.current;
+    track.classList.add('no-transition');
+    track.style.setProperty('transition', 'none', 'important');
+    track.style.transform = `translateX(${-targetIndex * width}px)`;
+    void track.offsetWidth; // Force reflow
+    track.classList.remove('no-transition');
+    track.style.removeProperty('transition');
+  }, [containerWidth]);
+
+  // Navigate to slide with clean boundary handling (Issue 2: Generalized jump fix)
   const goToSlide = useCallback((newIndex: number) => {
     const clampedIndex = Math.max(0, Math.min(totalImages - 1, newIndex));
     const prevIndex = currentIndexRef.current;
@@ -131,65 +144,90 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     if (!trackRef.current || width <= 0) return;
 
     const track = trackRef.current;
-    const isWrapAround =
+    const isJump =
+      Math.abs(clampedIndex - prevIndex) > 1 ||
       (prevIndex === totalImages - 1 && clampedIndex === 0) ||
-      (prevIndex === 0 && clampedIndex === totalImages - 1) ||
-      Math.abs(clampedIndex - prevIndex) > 1;
+      (prevIndex === 0 && clampedIndex === totalImages - 1);
 
-    if (isWrapAround) {
-      // Clean, non-jarring wrap-around without sliding/flying across intermediate images
-      if (wrapTimeoutRef.current) {
-        clearTimeout(wrapTimeoutRef.current);
-        wrapTimeoutRef.current = null;
-      }
-      isWrappingRef.current = true;
-
-      // Soft brief crossfade transition
-      track.style.transition = 'opacity 110ms ease';
-      track.style.opacity = '0';
-
-      wrapTimeoutRef.current = setTimeout(() => {
-        if (!trackRef.current) return;
-        trackRef.current.style.transition = 'none';
-        trackRef.current.style.transform = `translateX(${-clampedIndex * width}px)`;
-        void trackRef.current.offsetWidth; // Force reflow
-
-        trackRef.current.style.transition = 'opacity 120ms ease';
-        trackRef.current.style.opacity = '1';
-
-        wrapTimeoutRef.current = setTimeout(() => {
-          if (!trackRef.current) return;
-          trackRef.current.style.transition = '';
-          trackRef.current.style.opacity = '';
-          isWrappingRef.current = false;
-          wrapTimeoutRef.current = null;
-        }, 130);
-      }, 110);
+    if (isJump) {
+      // Clean non-sliding jump for wraps and multi-step jumps
+      applyPositionWithoutTransition(clampedIndex);
     } else {
       // Normal adjacent sliding: 100% UNTOUCHED
       // Uses the exact existing CSS transition: transform 350ms cubic-bezier(0.25, 0.1, 0.25, 1)
-      if (isWrappingRef.current) {
-        if (wrapTimeoutRef.current) {
-          clearTimeout(wrapTimeoutRef.current);
-          wrapTimeoutRef.current = null;
-        }
-        isWrappingRef.current = false;
-        track.style.transition = '';
-        track.style.opacity = '';
-      }
       track.style.transform = `translateX(${-clampedIndex * width}px)`;
     }
-  }, [totalImages, onIndexChange, containerWidth]);
+  }, [totalImages, onIndexChange, containerWidth, applyPositionWithoutTransition]);
 
-  // Synchronize track position when activeImageIndex or containerWidth changes (when not dragging or wrapping)
+  // Button navigation (synchronous sequential steps using currentIndexRef)
+  const handlePrev = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (isZoomedRef.current) {
+      setScale(1);
+      scaleRef.current = 1;
+      setIsZoomed(false);
+      isZoomedRef.current = false;
+      setPan({ x: 0, y: 0 });
+      panRef.current = { x: 0, y: 0 };
+    }
+    const current = currentIndexRef.current;
+    if (current > 0) {
+      goToSlide(current - 1);
+    } else if (totalImages > 1) {
+      goToSlide(totalImages - 1);
+    }
+  }, [totalImages, goToSlide]);
+
+  const handleNext = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (isZoomedRef.current) {
+      setScale(1);
+      scaleRef.current = 1;
+      setIsZoomed(false);
+      isZoomedRef.current = false;
+      setPan({ x: 0, y: 0 });
+      panRef.current = { x: 0, y: 0 };
+    }
+    const current = currentIndexRef.current;
+    if (current < totalImages - 1) {
+      goToSlide(current + 1);
+    } else if (totalImages > 1) {
+      goToSlide(0);
+    }
+  }, [totalImages, goToSlide]);
+
+  const prevSyncedIndexRef = useRef(activeImageIndex);
+
+  // Synchronize track position when activeImageIndex or containerWidth changes (when not dragging)
+  // Generalizes the jump fix to ANY jump > 1 or external prop change (grid / lightbox thumbnail clicks / hover preview)
   useEffect(() => {
+    const prevIndex = prevSyncedIndexRef.current;
+    prevSyncedIndexRef.current = activeImageIndex;
+    const wasExternalChange = currentIndexRef.current !== activeImageIndex;
     currentIndexRef.current = activeImageIndex;
-    if (isDraggingRef.current || isWrappingRef.current) return;
+
+    if (isDraggingRef.current) return;
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
-    if (trackRef.current && width > 0) {
+    if (!trackRef.current || width <= 0) return;
+
+    const isJump =
+      Math.abs(activeImageIndex - prevIndex) > 1 ||
+      (prevIndex === totalImages - 1 && activeImageIndex === 0) ||
+      (prevIndex === 0 && activeImageIndex === totalImages - 1) ||
+      wasExternalChange;
+
+    if (isJump) {
+      applyPositionWithoutTransition(activeImageIndex);
+    } else {
       trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
     }
-  }, [activeImageIndex, containerWidth]);
+  }, [activeImageIndex, containerWidth, totalImages, applyPositionWithoutTransition]);
 
   // On Drag Start for Slider Track
   const onDragStart = useCallback((clientX: number, clientY: number) => {
@@ -419,6 +457,8 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
+      lastTouchTimeRef.current = Date.now();
+
       // Pinch end
       if (isPinchingRef.current) {
         isPinchingRef.current = false;
@@ -441,60 +481,120 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
         ? Math.hypot(touch.clientX - touchStartPosRef.current.x, touch.clientY - touchStartPosRef.current.y)
         : 0;
 
-      // Double-tap to zoom:
-      // If time since last tap < 300ms and diff < 10px, toggle zoom
-      if (distFromStart < 10 && (now - touchStartTimeRef.current < 300)) {
-        if (now - lastTapRef.current < 300) {
-          // Double-tap confirmed
-          if (singleTapTimeoutRef.current) {
-            clearTimeout(singleTapTimeoutRef.current);
-            singleTapTimeoutRef.current = null;
-          }
-          lastTapRef.current = 0;
+      // When zoomed in (scale > 1.05)
+      if (scaleRef.current > 1.05) {
+        // Double-tap to zoom out
+        if (distFromStart < 15 && (now - touchStartTimeRef.current < 320)) {
+          if (now - lastTapRef.current < 320) {
+            e.preventDefault();
+            lastDoubleTapTimeRef.current = now;
+            lastTapRef.current = 0;
+            if (singleTapTimeoutRef.current) {
+              clearTimeout(singleTapTimeoutRef.current);
+              singleTapTimeoutRef.current = null;
+            }
 
-          if (!isZoomedRef.current) {
-            // Zoom in
-            setScale(2.5);
-            scaleRef.current = 2.5;
-            setIsZoomed(true);
-            isZoomedRef.current = true;
-            setPan({ x: 0, y: 0 });
-            panRef.current = { x: 0, y: 0 };
-          } else {
-            // Zoom out
+            // Zoom out to 1x
             setScale(1);
             scaleRef.current = 1;
             setIsZoomed(false);
             isZoomedRef.current = false;
             setPan({ x: 0, y: 0 });
             panRef.current = { x: 0, y: 0 };
+            isDraggingRef.current = false;
+            setIsDragging(false);
+            onDragCancel();
+            return;
+          } else {
+            lastTapRef.current = now;
           }
+        }
+
+        // ISSUE 4: Detect swipe-to-navigate while zoomed
+        // If the user makes a clear, deliberate horizontal swipe gesture, switch slides and reset zoom to 1x
+        if (touch && totalImages > 1) {
+          const dx = touch.clientX - touchStartPosRef.current.x;
+          const dy = touch.clientY - touchStartPosRef.current.y;
+          const dt = Math.max(1, now - touchStartTimeRef.current);
+          const absDx = Math.abs(dx);
+          const absDy = Math.abs(dy);
+          const speedX = absDx / dt;
+
+          const isHorizontalMotion = absDx >= absDy * 1.5 && absDy < 80;
+          const isQuickFlick = absDx >= 45 && dt < 350 && speedX >= 0.35;
+          const isSubstantialSwipe = absDx >= 85 && dt < 650 && absDx >= absDy * 2;
+
+          if (isHorizontalMotion && (isQuickFlick || isSubstantialSwipe)) {
+            // Reset zoom back to 1x for the newly selected image
+            setScale(1);
+            scaleRef.current = 1;
+            setIsZoomed(false);
+            isZoomedRef.current = false;
+            setPan({ x: 0, y: 0 });
+            panRef.current = { x: 0, y: 0 };
+            isDraggingRef.current = false;
+            setIsDragging(false);
+
+            if (dx < 0) {
+              handleNext();
+            } else {
+              handlePrev();
+            }
+            return;
+          }
+        }
+
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        return;
+      }
+
+      // When not zoomed (scale <= 1.05)
+      // Double-tap to zoom in
+      if (distFromStart < 15 && (now - touchStartTimeRef.current < 320)) {
+        if (now - lastTapRef.current < 320) {
+          // Double-tap confirmed! Strictly prevent single tap navigation/click (Issue 3)
+          e.preventDefault();
+          lastDoubleTapTimeRef.current = now;
+          lastTapRef.current = 0;
+          if (singleTapTimeoutRef.current) {
+            clearTimeout(singleTapTimeoutRef.current);
+            singleTapTimeoutRef.current = null;
+          }
+
+          // Zoom in to 2.5x
+          setScale(2.5);
+          scaleRef.current = 2.5;
+          setIsZoomed(true);
+          isZoomedRef.current = true;
+          setPan({ x: 0, y: 0 });
+          panRef.current = { x: 0, y: 0 };
 
           onDragCancel();
           return;
         } else {
           lastTapRef.current = now;
-          // Trigger onImageClick if single tap confirmed
+          // Trigger onImageClick ONLY if a second tap does NOT follow within 300ms (and not in lightbox)
           if (!isZoomedRef.current && !isLightbox && onImageClick) {
+            if (singleTapTimeoutRef.current) {
+              clearTimeout(singleTapTimeoutRef.current);
+            }
             const clickIdx = currentIndexRef.current;
             singleTapTimeoutRef.current = setTimeout(() => {
-              onImageClick(clickIdx);
+              if (Date.now() - lastDoubleTapTimeRef.current > 500) {
+                onImageClick(clickIdx);
+              }
               singleTapTimeoutRef.current = null;
-            }, 280);
+            }, 300);
           }
         }
-      }
-
-      if (scaleRef.current > 1.05) {
-        isDraggingRef.current = false;
-        setIsDragging(false);
-        return;
       }
 
       onDragEnd();
     };
 
     const handleTouchCancel = () => {
+      lastTouchTimeRef.current = Date.now();
       isPinchingRef.current = false;
       isDraggingRef.current = false;
       setIsDragging(false);
@@ -512,50 +612,15 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchCancel);
     };
-  }, [containerWidth, onDragStart, onDragMove, onDragEnd, onDragCancel, isLightbox, onImageClick]);
+  }, [containerWidth, onDragStart, onDragMove, onDragEnd, onDragCancel, isLightbox, onImageClick, totalImages, handleNext, handlePrev]);
 
-  // Desktop Mouse Drag Handling
+  // Desktop Mouse Drag Handling (Standard drag only; desktop has no zoom capability - Issue 1)
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // only left-click
 
-    // Ignore drag start if clicking buttons or controls (Fixes Issue 3 race condition)
+    // Ignore drag start if clicking buttons or controls
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('#badge-detail-image-counter')) {
-      return;
-    }
-
-    if (scaleRef.current > 1.05) {
-      // Mouse drag panning when zoomed on desktop
-      isDraggingRef.current = true;
-      setIsDragging(true);
-      panStartXRef.current = e.clientX;
-      panStartYRef.current = e.clientY;
-      panStartPosRef.current = { ...panRef.current };
-
-      const handleMouseMovePan = (me: MouseEvent) => {
-        const dx = me.clientX - panStartXRef.current;
-        const dy = me.clientY - panStartYRef.current;
-        const container = containerRef.current;
-        const containerH = container ? container.clientHeight : 400;
-        const maxX = Math.max(0, (containerWidth * (scaleRef.current - 1)) / 2);
-        const maxY = Math.max(0, (containerH * (scaleRef.current - 1)) / 2);
-
-        const newPanX = Math.max(-maxX, Math.min(maxX, panStartPosRef.current.x + dx));
-        const newPanY = Math.max(-maxY, Math.min(maxY, panStartPosRef.current.y + dy));
-
-        panRef.current = { x: newPanX, y: newPanY };
-        setPan({ x: newPanX, y: newPanY });
-      };
-
-      const handleMouseUpPan = () => {
-        window.removeEventListener('mousemove', handleMouseMovePan);
-        window.removeEventListener('mouseup', handleMouseUpPan);
-        isDraggingRef.current = false;
-        setIsDragging(false);
-      };
-
-      window.addEventListener('mousemove', handleMouseMovePan);
-      window.addEventListener('mouseup', handleMouseUpPan);
       return;
     }
 
@@ -575,73 +640,20 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  // Double click on desktop to toggle zoom
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (!isZoomedRef.current) {
-      setScale(2.5);
-      scaleRef.current = 2.5;
-      setIsZoomed(true);
-      isZoomedRef.current = true;
-      setPan({ x: 0, y: 0 });
-      panRef.current = { x: 0, y: 0 };
-    } else {
-      setScale(1);
-      scaleRef.current = 1;
-      setIsZoomed(false);
-      isZoomedRef.current = false;
-      setPan({ x: 0, y: 0 });
-      panRef.current = { x: 0, y: 0 };
-    }
-  };
-
-  // Button navigation (Issue 3: synchronous sequential steps using currentIndexRef)
-  const handlePrev = useCallback((e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-    if (isZoomedRef.current) {
-      setScale(1);
-      scaleRef.current = 1;
-      setIsZoomed(false);
-      isZoomedRef.current = false;
-      setPan({ x: 0, y: 0 });
-      panRef.current = { x: 0, y: 0 };
-    }
-    const current = currentIndexRef.current;
-    if (current > 0) {
-      goToSlide(current - 1);
-    } else if (totalImages > 1) {
-      goToSlide(totalImages - 1);
-    }
-  }, [totalImages, goToSlide]);
-
-  const handleNext = useCallback((e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-    if (isZoomedRef.current) {
-      setScale(1);
-      scaleRef.current = 1;
-      setIsZoomed(false);
-      isZoomedRef.current = false;
-      setPan({ x: 0, y: 0 });
-      panRef.current = { x: 0, y: 0 };
-    }
-    const current = currentIndexRef.current;
-    if (current < totalImages - 1) {
-      goToSlide(current + 1);
-    } else if (totalImages > 1) {
-      goToSlide(0);
-    }
-  }, [totalImages, goToSlide]);
-
-  // Slide click handler (Lightbox navigation when not zoomed)
+  // Slide click handler (Desktop lightbox navigation / click to open modal)
   const handleSlideClick = (index: number, e: React.MouseEvent) => {
-    if (Math.abs(diffRef.current) >= 6 || isZoomed) {
+    // If click is synthetic from a touch event or occurred right after a double tap, ignore it! (Issue 3)
+    const isSyntheticTouchClick =
+      Date.now() - lastTouchTimeRef.current < 700 ||
+      Date.now() - lastDoubleTapTimeRef.current < 1000;
+
+    if (isSyntheticTouchClick) {
+      e.stopPropagation();
+      e.preventDefault();
+      return;
+    }
+
+    if (Math.abs(diffRef.current) >= 6 || isZoomed || scaleRef.current > 1.05) {
       e.stopPropagation();
       e.preventDefault();
       return;
@@ -669,7 +681,6 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     <div
       ref={containerRef}
       onMouseDown={handleMouseDown}
-      onDoubleClick={handleDoubleClick}
       className={`relative select-none overflow-hidden block ${
         isLightbox
           ? 'h-full w-full flex-1 min-h-0 bg-black cursor-default'
