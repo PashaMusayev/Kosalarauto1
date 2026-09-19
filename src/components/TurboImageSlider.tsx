@@ -22,7 +22,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   safeTitle,
   onImageClick,
   isLightbox = false,
-  disabledKeyNav = false,
+  disabledKeyNav: _disabledKeyNav,
   className,
   onOpenPhotoGrid,
 }) => {
@@ -36,6 +36,12 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const trackRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
 
+  // Synchronous index ref to prevent rapid-click stale state issues (Issue 3)
+  const currentIndexRef = useRef(activeImageIndex);
+  useEffect(() => {
+    currentIndexRef.current = activeImageIndex;
+  }, [activeImageIndex]);
+
   // States & Refs for smooth Turbo.az touch & mouse slider
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
@@ -46,7 +52,11 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const dragStartTimeRef = useRef(0);
   const isHorizontalDragRef = useRef<boolean | null>(null);
 
-  // 1. Zoom states for Turbo.az pinch-to-zoom and double-tap zoom
+  // Wrap-around control to eliminate fly-through animation (Issue 2)
+  const isWrappingRef = useRef(false);
+  const wrapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Zoom states for Turbo.az pinch-to-zoom and double-tap zoom
   const [scale, setScale] = useState(1);
   const [isZoomed, setIsZoomed] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -110,19 +120,71 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   }, [imagesList, activeImageIndex, totalImages]);
 
-  // Navigate to slide
+  // Navigate to slide with clean boundary handling (Issue 2)
   const goToSlide = useCallback((newIndex: number) => {
     const clampedIndex = Math.max(0, Math.min(totalImages - 1, newIndex));
+    const prevIndex = currentIndexRef.current;
+    currentIndexRef.current = clampedIndex;
     onIndexChange(clampedIndex);
+
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
-    if (trackRef.current && width > 0) {
-      trackRef.current.style.transform = `translateX(${-clampedIndex * width}px)`;
+    if (!trackRef.current || width <= 0) return;
+
+    const track = trackRef.current;
+    const isWrapAround =
+      (prevIndex === totalImages - 1 && clampedIndex === 0) ||
+      (prevIndex === 0 && clampedIndex === totalImages - 1) ||
+      Math.abs(clampedIndex - prevIndex) > 1;
+
+    if (isWrapAround) {
+      // Clean, non-jarring wrap-around without sliding/flying across intermediate images
+      if (wrapTimeoutRef.current) {
+        clearTimeout(wrapTimeoutRef.current);
+        wrapTimeoutRef.current = null;
+      }
+      isWrappingRef.current = true;
+
+      // Soft brief crossfade transition
+      track.style.transition = 'opacity 110ms ease';
+      track.style.opacity = '0';
+
+      wrapTimeoutRef.current = setTimeout(() => {
+        if (!trackRef.current) return;
+        trackRef.current.style.transition = 'none';
+        trackRef.current.style.transform = `translateX(${-clampedIndex * width}px)`;
+        void trackRef.current.offsetWidth; // Force reflow
+
+        trackRef.current.style.transition = 'opacity 120ms ease';
+        trackRef.current.style.opacity = '1';
+
+        wrapTimeoutRef.current = setTimeout(() => {
+          if (!trackRef.current) return;
+          trackRef.current.style.transition = '';
+          trackRef.current.style.opacity = '';
+          isWrappingRef.current = false;
+          wrapTimeoutRef.current = null;
+        }, 130);
+      }, 110);
+    } else {
+      // Normal adjacent sliding: 100% UNTOUCHED
+      // Uses the exact existing CSS transition: transform 350ms cubic-bezier(0.25, 0.1, 0.25, 1)
+      if (isWrappingRef.current) {
+        if (wrapTimeoutRef.current) {
+          clearTimeout(wrapTimeoutRef.current);
+          wrapTimeoutRef.current = null;
+        }
+        isWrappingRef.current = false;
+        track.style.transition = '';
+        track.style.opacity = '';
+      }
+      track.style.transform = `translateX(${-clampedIndex * width}px)`;
     }
   }, [totalImages, onIndexChange, containerWidth]);
 
-  // Synchronize track position when activeImageIndex or containerWidth changes (when not dragging)
+  // Synchronize track position when activeImageIndex or containerWidth changes (when not dragging or wrapping)
   useEffect(() => {
-    if (isDraggingRef.current) return;
+    currentIndexRef.current = activeImageIndex;
+    if (isDraggingRef.current || isWrappingRef.current) return;
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     if (trackRef.current && width > 0) {
       trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
@@ -142,12 +204,12 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     diffRef.current = 0;
     dragStartTimeRef.current = Date.now();
     isHorizontalDragRef.current = null;
-    currentTranslateRef.current = -activeImageIndex * width;
+    currentTranslateRef.current = -currentIndexRef.current * width;
 
     if (trackRef.current) {
       trackRef.current.classList.add('dragging');
     }
-  }, [activeImageIndex, totalImages, containerWidth]);
+  }, [totalImages, containerWidth]);
 
   // On Drag Move for Slider Track
   const onDragMove = useCallback((clientX: number, clientY: number, e?: TouchEvent | MouseEvent) => {
@@ -168,7 +230,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       if (trackRef.current) {
         trackRef.current.classList.remove('dragging');
         const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
-        trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
+        trackRef.current.style.transform = `translateX(${-currentIndexRef.current * width}px)`;
       }
       isDraggingRef.current = false;
       setIsDragging(false);
@@ -180,10 +242,11 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
 
     let diff = dx;
+    const currentIdx = currentIndexRef.current;
     // Rubber-band resistance if dragging past first or last slide
-    if (activeImageIndex === 0 && diff > 0) {
+    if (currentIdx === 0 && diff > 0) {
       diff = diff * 0.35;
-    } else if (activeImageIndex === totalImages - 1 && diff < 0) {
+    } else if (currentIdx === totalImages - 1 && diff < 0) {
       diff = diff * 0.35;
     }
 
@@ -192,7 +255,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     if (trackRef.current) {
       trackRef.current.style.transform = `translateX(${currentTranslateRef.current + diff}px)`;
     }
-  }, [activeImageIndex, totalImages, containerWidth]);
+  }, [totalImages, containerWidth]);
 
   // On Drag End for Slider Track
   const onDragEnd = useCallback(() => {
@@ -210,28 +273,29 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
 
     const elapsed = Date.now() - dragStartTimeRef.current;
     const isQuickFlick = elapsed < 280 && Math.abs(diff) > 35;
+    const currentIdx = currentIndexRef.current;
 
     if (Math.abs(diff) < threshold && !isQuickFlick) {
       // Snap back smoothly
       if (trackRef.current) {
-        trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
+        trackRef.current.style.transform = `translateX(${-currentIdx * width}px)`;
       }
     } else {
       // Go to next or prev
       if (diff < 0) {
         // Next slide
-        if (activeImageIndex < totalImages - 1) {
-          goToSlide(activeImageIndex + 1);
+        if (currentIdx < totalImages - 1) {
+          goToSlide(currentIdx + 1);
         } else {
           // At end: snap back with rubber-band recovery
           if (trackRef.current) {
-            trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
+            trackRef.current.style.transform = `translateX(${-currentIdx * width}px)`;
           }
         }
       } else {
         // Prev slide
-        if (activeImageIndex > 0) {
-          goToSlide(activeImageIndex - 1);
+        if (currentIdx > 0) {
+          goToSlide(currentIdx - 1);
         } else {
           // At start: snap back with rubber-band recovery
           if (trackRef.current) {
@@ -246,7 +310,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       diffRef.current = 0;
       isHorizontalDragRef.current = null;
     }, 50);
-  }, [activeImageIndex, totalImages, containerWidth, goToSlide]);
+  }, [totalImages, containerWidth, goToSlide]);
 
   const onDragCancel = useCallback(() => {
     if (!isDraggingRef.current) return;
@@ -255,11 +319,11 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     if (trackRef.current) {
       trackRef.current.classList.remove('dragging');
-      trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
+      trackRef.current.style.transform = `translateX(${-currentIndexRef.current * width}px)`;
     }
     diffRef.current = 0;
     isHorizontalDragRef.current = null;
-  }, [activeImageIndex, containerWidth]);
+  }, [containerWidth]);
 
   // Touch listener attached with non-passive touchmove for gesture control & zoom
   useEffect(() => {
@@ -267,7 +331,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     if (!container) return;
 
     const handleTouchStart = (e: TouchEvent) => {
-      // 3. Pinch-zoom with 2 fingers
+      // Pinch-zoom with 2 fingers
       if (e.touches.length === 2) {
         e.preventDefault();
         onDragCancel();
@@ -377,11 +441,11 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
         ? Math.hypot(touch.clientX - touchStartPosRef.current.x, touch.clientY - touchStartPosRef.current.y)
         : 0;
 
-      // 2. Double-tap to zoom:
+      // Double-tap to zoom:
       // If time since last tap < 300ms and diff < 10px, toggle zoom
       if (distFromStart < 10 && (now - touchStartTimeRef.current < 300)) {
         if (now - lastTapRef.current < 300) {
-          // Double-tap confirmed!
+          // Double-tap confirmed
           if (singleTapTimeoutRef.current) {
             clearTimeout(singleTapTimeoutRef.current);
             singleTapTimeoutRef.current = null;
@@ -412,8 +476,9 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
           lastTapRef.current = now;
           // Trigger onImageClick if single tap confirmed
           if (!isZoomedRef.current && !isLightbox && onImageClick) {
+            const clickIdx = currentIndexRef.current;
             singleTapTimeoutRef.current = setTimeout(() => {
-              onImageClick(activeImageIndex);
+              onImageClick(clickIdx);
               singleTapTimeoutRef.current = null;
             }, 280);
           }
@@ -447,11 +512,17 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchCancel);
     };
-  }, [activeImageIndex, containerWidth, onDragStart, onDragMove, onDragEnd, onDragCancel, isLightbox, onImageClick]);
+  }, [containerWidth, onDragStart, onDragMove, onDragEnd, onDragCancel, isLightbox, onImageClick]);
 
   // Desktop Mouse Drag Handling
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // only left-click
+
+    // Ignore drag start if clicking buttons or controls (Fixes Issue 3 race condition)
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('#badge-detail-image-counter')) {
+      return;
+    }
 
     if (scaleRef.current > 1.05) {
       // Mouse drag panning when zoomed on desktop
@@ -525,7 +596,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   };
 
-  // Button navigation
+  // Button navigation (Issue 3: synchronous sequential steps using currentIndexRef)
   const handlePrev = useCallback((e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
@@ -539,12 +610,13 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       setPan({ x: 0, y: 0 });
       panRef.current = { x: 0, y: 0 };
     }
-    if (activeImageIndex > 0) {
-      goToSlide(activeImageIndex - 1);
+    const current = currentIndexRef.current;
+    if (current > 0) {
+      goToSlide(current - 1);
     } else if (totalImages > 1) {
       goToSlide(totalImages - 1);
     }
-  }, [activeImageIndex, totalImages, goToSlide]);
+  }, [totalImages, goToSlide]);
 
   const handleNext = useCallback((e?: React.MouseEvent) => {
     if (e) {
@@ -559,30 +631,13 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       setPan({ x: 0, y: 0 });
       panRef.current = { x: 0, y: 0 };
     }
-    if (activeImageIndex < totalImages - 1) {
-      goToSlide(activeImageIndex + 1);
+    const current = currentIndexRef.current;
+    if (current < totalImages - 1) {
+      goToSlide(current + 1);
     } else if (totalImages > 1) {
       goToSlide(0);
     }
-  }, [activeImageIndex, totalImages, goToSlide]);
-
-  // Keyboard navigation
-  useEffect(() => {
-    if (disabledKeyNav || totalImages <= 1 || isZoomed) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        handlePrev();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        handleNext();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [disabledKeyNav, totalImages, handlePrev, handleNext, isZoomed]);
+  }, [totalImages, goToSlide]);
 
   // Slide click handler (Lightbox navigation when not zoomed)
   const handleSlideClick = (index: number, e: React.MouseEvent) => {
@@ -633,11 +688,6 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
         }}
       >
         {imagesList.map((imgSrc, index) => {
-          const isCurrentOrNeighbor =
-            index === activeImageIndex ||
-            index === (activeImageIndex + 1) % totalImages ||
-            index === (activeImageIndex - 1 + totalImages) % totalImages;
-
           const isActiveSlide = index === activeImageIndex;
 
           return (
@@ -647,37 +697,31 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
               className="w-full h-full shrink-0 flex items-center justify-center overflow-hidden relative bg-black select-none"
               style={{ width: containerWidth > 0 ? `${containerWidth}px` : '100%' }}
             >
-              {isCurrentOrNeighbor ? (
-                <img
-                  src={getValidImageUrl(imgSrc)}
-                  alt={`${safeTitle} - ${index + 1}`}
-                  loading={index === 0 ? 'eager' : 'lazy'}
-                  decoding="async"
-                  onError={(e) => {
-                    handleImageLoadError(e.currentTarget);
-                  }}
-                  className={`select-none pointer-events-none block mx-auto drop-shadow-md ${
-                    isLightbox
-                      ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
-                      : 'w-full h-full object-cover md:object-contain'
-                  }`}
-                  style={{
-                    width: isLightbox ? 'auto' : '100%',
-                    height: isLightbox ? 'auto' : '100%',
-                    objectPosition: 'center',
-                    transform: isActiveSlide && isZoomed
-                      ? `translate3d(${pan.x}px, ${pan.y}px, 0px) scale(${scale})`
-                      : 'scale(1)',
-                    transition: isDragging ? 'none' : 'transform 300ms ease',
-                    transformOrigin: 'center center',
-                    willChange: 'transform',
-                  }}
-                />
-              ) : (
-                <div className="w-full h-full bg-black flex items-center justify-center">
-                  <div className="w-8 h-8 rounded-full border-2 border-slate-700 border-t-blue-500 animate-spin" />
-                </div>
-              )}
+              <img
+                src={getValidImageUrl(imgSrc)}
+                alt={`${safeTitle} - ${index + 1}`}
+                loading={Math.abs(index - activeImageIndex) <= 1 ? 'eager' : 'lazy'}
+                decoding="async"
+                onError={(e) => {
+                  handleImageLoadError(e.currentTarget);
+                }}
+                className={`select-none pointer-events-none block mx-auto drop-shadow-md ${
+                  isLightbox
+                    ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
+                    : 'w-full h-full object-cover md:object-contain'
+                }`}
+                style={{
+                  width: isLightbox ? 'auto' : '100%',
+                  height: isLightbox ? 'auto' : '100%',
+                  objectPosition: 'center',
+                  transform: isActiveSlide && isZoomed
+                    ? `translate3d(${pan.x}px, ${pan.y}px, 0px) scale(${scale})`
+                    : 'scale(1)',
+                  transition: isDragging ? 'none' : 'transform 300ms ease',
+                  transformOrigin: 'center center',
+                  willChange: 'transform',
+                }}
+              />
             </div>
           );
         })}
@@ -716,12 +760,13 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
         </>
       )}
 
-      {/* Turbo.az Desktop Ox Düymələri */}
+      {/* Turbo.az Desktop Ox Düymələri (Desktop button-only navigation, Issue 1) */}
       {totalImages > 1 && (
         <>
           <button
             type="button"
             onClick={handlePrev}
+            onMouseDown={(e) => e.stopPropagation()}
             className={`hidden sm:flex absolute left-3.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white items-center justify-center z-20 border border-white/20 transition-all cursor-pointer shadow-md ${
               !isLightbox
                 ? 'opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 duration-200'
@@ -735,6 +780,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
           <button
             type="button"
             onClick={handleNext}
+            onMouseDown={(e) => e.stopPropagation()}
             className={`hidden sm:flex absolute right-3.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white items-center justify-center z-20 border border-white/20 transition-all cursor-pointer shadow-md ${
               !isLightbox
                 ? 'opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 duration-200'
