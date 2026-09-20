@@ -61,6 +61,21 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const [isZoomed, setIsZoomed] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
 
+  // Wrap-around seamless sliding states & refs (Phase 40)
+  const [wrapVisualIndex, setWrapVisualIndex] = useState<number | null>(null);
+  const isWrappingRef = useRef(false);
+  const wrapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear wrap timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (wrapTimeoutRef.current) {
+        clearTimeout(wrapTimeoutRef.current);
+        wrapTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const scaleRef = useRef(1);
   const isZoomedRef = useRef(false);
   const panRef = useRef({ x: 0, y: 0 });
@@ -121,7 +136,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   }, [imagesList, activeImageIndex, totalImages]);
 
-  // Helper to jump immediately to a slide without fly-through sliding transition (Issue 2)
+  // Helper to jump immediately to a slide without fly-through sliding transition (for multi-step jumps)
   const applyPositionWithoutTransition = useCallback((targetIndex: number) => {
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     if (!trackRef.current || width <= 0) return;
@@ -134,10 +149,129 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     track.style.removeProperty('transition');
   }, [containerWidth]);
 
-  // Navigate to slide with clean boundary handling (Issue 2: Generalized jump fix)
+  // Seamless loop forward: slide smoothly to clone of first image (at index totalImages), then silently snap to real index 0
+  const wrapNext = useCallback(() => {
+    if (isWrappingRef.current || totalImages <= 1) return;
+    const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
+    if (!trackRef.current || width <= 0) {
+      currentIndexRef.current = 0;
+      onIndexChange(0);
+      return;
+    }
+
+    isWrappingRef.current = true;
+    const track = trackRef.current;
+
+    if (wrapTimeoutRef.current) {
+      clearTimeout(wrapTimeoutRef.current);
+      wrapTimeoutRef.current = null;
+    }
+
+    // Ensure transition is active and dragging class is removed
+    track.classList.remove('dragging', 'no-transition');
+    track.style.removeProperty('transition');
+
+    // Slide 1 slide-width forward to the clone of the first image (at flex index totalImages)
+    track.style.transform = `translateX(${-totalImages * width}px)`;
+    setWrapVisualIndex(totalImages);
+
+    wrapTimeoutRef.current = setTimeout(() => {
+      if (!trackRef.current) {
+        isWrappingRef.current = false;
+        return;
+      }
+      const t = trackRef.current;
+      // Instantly swap track position to real first slide (index 0) with transition disabled
+      t.classList.add('no-transition');
+      t.style.setProperty('transition', 'none', 'important');
+      t.style.transform = 'translateX(0px)';
+      void t.offsetWidth; // Force synchronous reflow
+
+      currentIndexRef.current = 0;
+      onIndexChange(0);
+      setWrapVisualIndex(null);
+
+      requestAnimationFrame(() => {
+        if (trackRef.current) {
+          trackRef.current.classList.remove('no-transition');
+          trackRef.current.style.removeProperty('transition');
+        }
+        isWrappingRef.current = false;
+      });
+    }, 350);
+  }, [totalImages, containerWidth, onIndexChange]);
+
+  // Seamless loop backward: slide smoothly to clone of last image (at -100%), then silently snap to real last slide
+  const wrapPrev = useCallback(() => {
+    if (isWrappingRef.current || totalImages <= 1) return;
+    const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
+    if (!trackRef.current || width <= 0) {
+      currentIndexRef.current = totalImages - 1;
+      onIndexChange(totalImages - 1);
+      return;
+    }
+
+    isWrappingRef.current = true;
+    const track = trackRef.current;
+
+    if (wrapTimeoutRef.current) {
+      clearTimeout(wrapTimeoutRef.current);
+      wrapTimeoutRef.current = null;
+    }
+
+    // Ensure transition is active and dragging class is removed
+    track.classList.remove('dragging', 'no-transition');
+    track.style.removeProperty('transition');
+
+    // Slide 1 slide-width backward to the clone of the last image (located at left -100%, so transform is +width)
+    track.style.transform = `translateX(${width}px)`;
+    setWrapVisualIndex(-1);
+
+    wrapTimeoutRef.current = setTimeout(() => {
+      if (!trackRef.current) {
+        isWrappingRef.current = false;
+        return;
+      }
+      const t = trackRef.current;
+      const targetIndex = totalImages - 1;
+      // Instantly swap track position to real last slide with transition disabled
+      t.classList.add('no-transition');
+      t.style.setProperty('transition', 'none', 'important');
+      t.style.transform = `translateX(${-targetIndex * width}px)`;
+      void t.offsetWidth; // Force synchronous reflow
+
+      currentIndexRef.current = targetIndex;
+      onIndexChange(targetIndex);
+      setWrapVisualIndex(null);
+
+      requestAnimationFrame(() => {
+        if (trackRef.current) {
+          trackRef.current.classList.remove('no-transition');
+          trackRef.current.style.removeProperty('transition');
+        }
+        isWrappingRef.current = false;
+      });
+    }, 350);
+  }, [totalImages, containerWidth, onIndexChange]);
+
+  // Navigate to slide with clean boundary handling
   const goToSlide = useCallback((newIndex: number) => {
+    if (isWrappingRef.current) return;
     const clampedIndex = Math.max(0, Math.min(totalImages - 1, newIndex));
     const prevIndex = currentIndexRef.current;
+
+    // Check for boundary wrap
+    if (totalImages > 1) {
+      if (prevIndex === totalImages - 1 && clampedIndex === 0) {
+        wrapNext();
+        return;
+      }
+      if (prevIndex === 0 && clampedIndex === totalImages - 1) {
+        wrapPrev();
+        return;
+      }
+    }
+
     currentIndexRef.current = clampedIndex;
     onIndexChange(clampedIndex);
 
@@ -145,20 +279,17 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     if (!trackRef.current || width <= 0) return;
 
     const track = trackRef.current;
-    const isJump =
-      Math.abs(clampedIndex - prevIndex) > 1 ||
-      (prevIndex === totalImages - 1 && clampedIndex === 0) ||
-      (prevIndex === 0 && clampedIndex === totalImages - 1);
+    const isJump = Math.abs(clampedIndex - prevIndex) > 1;
 
     if (isJump) {
-      // Clean non-sliding jump for wraps and multi-step jumps
+      // Clean non-sliding jump for multi-step jumps (e.g. grid selection, thumbnail clicks)
       applyPositionWithoutTransition(clampedIndex);
     } else {
       // Normal adjacent sliding: 100% UNTOUCHED
       // Uses the exact existing CSS transition: transform 350ms cubic-bezier(0.25, 0.1, 0.25, 1)
       track.style.transform = `translateX(${-clampedIndex * width}px)`;
     }
-  }, [totalImages, onIndexChange, containerWidth, applyPositionWithoutTransition]);
+  }, [totalImages, onIndexChange, containerWidth, applyPositionWithoutTransition, wrapNext, wrapPrev]);
 
   // Button navigation (synchronous sequential steps using currentIndexRef)
   const handlePrev = useCallback((e?: React.MouseEvent) => {
@@ -166,6 +297,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       e.stopPropagation();
       e.preventDefault();
     }
+    if (isWrappingRef.current) return;
     if (isZoomedRef.current) {
       setScale(1);
       scaleRef.current = 1;
@@ -178,15 +310,16 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     if (current > 0) {
       goToSlide(current - 1);
     } else if (totalImages > 1) {
-      goToSlide(totalImages - 1);
+      wrapPrev();
     }
-  }, [totalImages, goToSlide]);
+  }, [totalImages, goToSlide, wrapPrev]);
 
   const handleNext = useCallback((e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
+    if (isWrappingRef.current) return;
     if (isZoomedRef.current) {
       setScale(1);
       scaleRef.current = 1;
@@ -199,15 +332,16 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     if (current < totalImages - 1) {
       goToSlide(current + 1);
     } else if (totalImages > 1) {
-      goToSlide(0);
+      wrapNext();
     }
-  }, [totalImages, goToSlide]);
+  }, [totalImages, goToSlide, wrapNext]);
 
   const prevSyncedIndexRef = useRef(activeImageIndex);
 
   // Synchronize track position when activeImageIndex or containerWidth changes (when not dragging)
   // Generalizes the jump fix to ANY jump > 1 or external prop change (grid / lightbox thumbnail clicks / hover preview)
   useEffect(() => {
+    if (isWrappingRef.current) return;
     const prevIndex = prevSyncedIndexRef.current;
     prevSyncedIndexRef.current = activeImageIndex;
     const wasExternalChange = currentIndexRef.current !== activeImageIndex;
@@ -233,6 +367,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   // On Drag Start for Slider Track
   const onDragStart = useCallback((clientX: number, clientY: number) => {
     if (totalImages <= 1) return;
+    if (isWrappingRef.current) return;
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     if (width <= 0) return;
 
@@ -326,22 +461,22 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     } else {
       // Go to next or prev
       if (diff < 0) {
-        // Next slide (wrap around to first image when swiping past the last image)
+        // Next slide (wrap around smoothly to first image when swiping past the last image)
         if (currentIdx < totalImages - 1) {
           goToSlide(currentIdx + 1);
         } else if (totalImages > 1) {
-          goToSlide(0);
+          wrapNext();
         } else {
           if (trackRef.current) {
             trackRef.current.style.transform = `translateX(${-currentIdx * width}px)`;
           }
         }
       } else {
-        // Prev slide (wrap around to last image when swiping before the first image)
+        // Prev slide (wrap around smoothly to last image when swiping before the first image)
         if (currentIdx > 0) {
           goToSlide(currentIdx - 1);
         } else if (totalImages > 1) {
-          goToSlide(totalImages - 1);
+          wrapPrev();
         } else {
           if (trackRef.current) {
             trackRef.current.style.transform = `translateX(0px)`;
@@ -355,7 +490,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       diffRef.current = 0;
       isHorizontalDragRef.current = null;
     }, 50);
-  }, [totalImages, containerWidth, goToSlide]);
+  }, [totalImages, containerWidth, goToSlide, wrapNext, wrapPrev]);
 
   const onDragCancel = useCallback(() => {
     if (!isDraggingRef.current) return;
@@ -711,7 +846,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       return;
     }
 
-    if (Math.abs(diffRef.current) >= 6 || isZoomed || scaleRef.current > 1.05) {
+    if (isWrappingRef.current || Math.abs(diffRef.current) >= 6 || isZoomed || scaleRef.current > 1.05) {
       e.stopPropagation();
       e.preventDefault();
       return;
@@ -735,6 +870,13 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   };
 
+  const displayIndex =
+    wrapVisualIndex !== null
+      ? wrapVisualIndex === -1
+        ? totalImages - 1
+        : 0
+      : activeImageIndex;
+
   return (
     <div
       ref={containerRef}
@@ -751,11 +893,51 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       {/* Smooth Slider Track */}
       <div
         ref={trackRef}
-        className="slider-track flex h-full w-full bg-black"
+        className="slider-track relative flex h-full w-full bg-black"
         style={{
-          transform: containerWidth > 0 ? `translateX(${-activeImageIndex * containerWidth}px)` : 'translateX(0px)',
+          transform:
+            wrapVisualIndex !== null
+              ? wrapVisualIndex === -1
+                ? containerWidth > 0 ? `translateX(${containerWidth}px)` : 'translateX(0px)'
+                : containerWidth > 0 ? `translateX(${-wrapVisualIndex * containerWidth}px)` : 'translateX(0px)'
+              : containerWidth > 0 ? `translateX(${-activeImageIndex * containerWidth}px)` : 'translateX(0px)',
         }}
       >
+        {/* Clone of Last Slide (Prepended absolutely at -100% for smooth backward wrap) */}
+        {totalImages > 1 && (
+          <div
+            key="clone-last-slide"
+            aria-hidden="true"
+            className="absolute top-0 bottom-0 h-full flex items-center justify-center overflow-hidden bg-black select-none pointer-events-none"
+            style={{
+              left: 0,
+              width: containerWidth > 0 ? `${containerWidth}px` : '100%',
+              transform: 'translateX(-100%)',
+            }}
+          >
+            <img
+              src={getValidImageUrl(imagesList[totalImages - 1])}
+              alt={`${safeTitle} - last clone`}
+              loading="eager"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                handleImageLoadError(e.currentTarget);
+              }}
+              className={`select-none pointer-events-none block mx-auto drop-shadow-md ${
+                isLightbox
+                  ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
+                  : 'w-full h-full object-cover md:object-contain'
+              }`}
+              style={{
+                width: isLightbox ? 'auto' : '100%',
+                height: isLightbox ? 'auto' : '100%',
+                objectPosition: 'center',
+              }}
+            />
+          </div>
+        )}
+
         {imagesList.map((imgSrc, index) => {
           const isActiveSlide = index === activeImageIndex;
 
@@ -794,6 +976,37 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
             </div>
           );
         })}
+
+        {/* Clone of First Slide (Appended in normal flex flow for smooth forward wrap) */}
+        {totalImages > 1 && (
+          <div
+            key="clone-first-slide"
+            aria-hidden="true"
+            className="w-full h-full shrink-0 flex items-center justify-center overflow-hidden relative bg-black select-none pointer-events-none"
+            style={{ width: containerWidth > 0 ? `${containerWidth}px` : '100%' }}
+          >
+            <img
+              src={getValidImageUrl(imagesList[0])}
+              alt={`${safeTitle} - first clone`}
+              loading="eager"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                handleImageLoadError(e.currentTarget);
+              }}
+              className={`select-none pointer-events-none block mx-auto drop-shadow-md ${
+                isLightbox
+                  ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
+                  : 'w-full h-full object-cover md:object-contain'
+              }`}
+              style={{
+                width: isLightbox ? 'auto' : '100%',
+                height: isLightbox ? 'auto' : '100%',
+                objectPosition: 'center',
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Turbo.az Image Controls: Bottom-Center Counter & Bottom-Right "Bütün şəkillər" Button */}
@@ -804,7 +1017,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
             id="badge-detail-image-counter"
             className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full font-medium opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200 select-none shadow-xs"
           >
-            <span>{activeImageIndex + 1}</span>
+            <span>{displayIndex + 1}</span>
             <span className="text-white/60 font-light">/</span>
             <span>{totalImages}</span>
           </div>
