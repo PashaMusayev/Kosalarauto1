@@ -78,6 +78,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const panStartPosRef = useRef({ x: 0, y: 0 });
   const touchStartPosRef = useRef({ x: 0, y: 0 });
   const touchStartTimeRef = useRef(0);
+  const isTouchOnControlRef = useRef(false);
 
   // Reset zoom on active slide change
   useEffect(() => {
@@ -295,13 +296,14 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
   }, [totalImages, containerWidth]);
 
-  // On Drag End for Slider Track
+  // On Drag End for Slider Track (Issue 3: boundary wrap-around navigation)
   const onDragEnd = useCallback(() => {
     if (!isDraggingRef.current) return;
     isDraggingRef.current = false;
     setIsDragging(false);
 
     const diff = diffRef.current;
+    const currentIdx = currentIndexRef.current;
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     const threshold = width * 0.25;
 
@@ -310,32 +312,37 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
 
     const elapsed = Date.now() - dragStartTimeRef.current;
-    const isQuickFlick = elapsed < 280 && Math.abs(diff) > 35;
-    const currentIdx = currentIndexRef.current;
+    const isBoundary =
+      (currentIdx === totalImages - 1 && diff < 0) ||
+      (currentIdx === 0 && diff > 0);
+    const effectiveThreshold = isBoundary ? threshold * 0.45 : threshold;
+    const isQuickFlick = elapsed < 320 && Math.abs(diff) > (isBoundary ? 20 : 35);
 
-    if (Math.abs(diff) < threshold && !isQuickFlick) {
-      // Snap back smoothly
+    if (Math.abs(diff) < effectiveThreshold && !isQuickFlick) {
+      // Snap back smoothly if gesture threshold is not reached
       if (trackRef.current) {
         trackRef.current.style.transform = `translateX(${-currentIdx * width}px)`;
       }
     } else {
       // Go to next or prev
       if (diff < 0) {
-        // Next slide
+        // Next slide (wrap around to first image when swiping past the last image)
         if (currentIdx < totalImages - 1) {
           goToSlide(currentIdx + 1);
+        } else if (totalImages > 1) {
+          goToSlide(0);
         } else {
-          // At end: snap back with rubber-band recovery
           if (trackRef.current) {
             trackRef.current.style.transform = `translateX(${-currentIdx * width}px)`;
           }
         }
       } else {
-        // Prev slide
+        // Prev slide (wrap around to last image when swiping before the first image)
         if (currentIdx > 0) {
           goToSlide(currentIdx - 1);
+        } else if (totalImages > 1) {
+          goToSlide(totalImages - 1);
         } else {
-          // At start: snap back with rubber-band recovery
           if (trackRef.current) {
             trackRef.current.style.transform = `translateX(0px)`;
           }
@@ -369,6 +376,19 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     if (!container) return;
 
     const handleTouchStart = (e: TouchEvent) => {
+      // Issue 1: If touch starts on a button or control, ignore so control handles it directly
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.closest('button') ||
+          target.closest('#btn-all-photos-grid') ||
+          target.closest('#badge-detail-image-counter'))
+      ) {
+        isTouchOnControlRef.current = true;
+        return;
+      }
+      isTouchOnControlRef.current = false;
+
       // Pinch-zoom with 2 fingers
       if (e.touches.length === 2) {
         e.preventDefault();
@@ -405,6 +425,8 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     };
 
     const handleTouchMove = (e: TouchEvent) => {
+      if (isTouchOnControlRef.current) return;
+
       // Pinching with 2 fingers
       if (e.touches.length === 2 && isPinchingRef.current) {
         e.preventDefault();
@@ -457,6 +479,12 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
+      // Issue 1: If touch was on a button or control, exit immediately
+      if (isTouchOnControlRef.current) {
+        isTouchOnControlRef.current = false;
+        return;
+      }
+
       lastTouchTimeRef.current = Date.now();
 
       // Pinch end
@@ -550,10 +578,10 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       }
 
       // When not zoomed (scale <= 1.05)
-      // Double-tap to zoom in
+      // Double-tap to zoom in with focal-point targeting (Issue 2)
       if (distFromStart < 15 && (now - touchStartTimeRef.current < 320)) {
         if (now - lastTapRef.current < 320) {
-          // Double-tap confirmed! Strictly prevent single tap navigation/click (Issue 3)
+          // Double-tap confirmed! Strictly prevent single tap navigation/click
           e.preventDefault();
           lastDoubleTapTimeRef.current = now;
           lastTapRef.current = 0;
@@ -562,13 +590,38 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
             singleTapTimeoutRef.current = null;
           }
 
-          // Zoom in to 2.5x
-          setScale(2.5);
-          scaleRef.current = 2.5;
+          // Focal-point zoom: calculate pan so tapped point is centered in zoomed view
+          const targetScale = 2.5;
+          let initialPanX = 0;
+          let initialPanY = 0;
+
+          if (container && touch) {
+            const rect = container.getBoundingClientRect();
+            const tapX = touch.clientX - rect.left;
+            const tapY = touch.clientY - rect.top;
+            const containerW = rect.width || containerWidth || 400;
+            const containerH = rect.height || container.clientHeight || 400;
+
+            const deltaX = tapX - containerW / 2;
+            const deltaY = tapY - containerH / 2;
+
+            const rawPanX = -deltaX * (targetScale - 1);
+            const rawPanY = -deltaY * (targetScale - 1);
+
+            const maxX = Math.max(0, (containerW * (targetScale - 1)) / 2);
+            const maxY = Math.max(0, (containerH * (targetScale - 1)) / 2);
+
+            initialPanX = Math.max(-maxX, Math.min(maxX, rawPanX));
+            initialPanY = Math.max(-maxY, Math.min(maxY, rawPanY));
+          }
+
+          // Zoom in to 2.5x with focal point
+          setScale(targetScale);
+          scaleRef.current = targetScale;
           setIsZoomed(true);
           isZoomedRef.current = true;
-          setPan({ x: 0, y: 0 });
-          panRef.current = { x: 0, y: 0 };
+          setPan({ x: initialPanX, y: initialPanY });
+          panRef.current = { x: initialPanX, y: initialPanY };
 
           onDragCancel();
           return;
@@ -594,6 +647,11 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     };
 
     const handleTouchCancel = () => {
+      if (isTouchOnControlRef.current) {
+        isTouchOnControlRef.current = false;
+        return;
+      }
+
       lastTouchTimeRef.current = Date.now();
       isPinchingRef.current = false;
       isDraggingRef.current = false;
@@ -756,6 +814,10 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
             <button
               type="button"
               id="btn-all-photos-grid"
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenPhotoGrid();
@@ -777,6 +839,8 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
           <button
             type="button"
             onClick={handlePrev}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             className={`hidden sm:flex absolute left-3.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white items-center justify-center z-20 border border-white/20 transition-all cursor-pointer shadow-md ${
               !isLightbox
@@ -791,6 +855,8 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
           <button
             type="button"
             onClick={handleNext}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             className={`hidden sm:flex absolute right-3.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white items-center justify-center z-20 border border-white/20 transition-all cursor-pointer shadow-md ${
               !isLightbox
