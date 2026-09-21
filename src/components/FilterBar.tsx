@@ -69,6 +69,29 @@ const parseMulti = (val: string | string[] | undefined): string[] => {
   return [];
 };
 
+// Helper to dynamically calculate if dropdown should open upward or downward based on available space
+const calculateDropdownDirection = (
+  container: HTMLElement | null,
+  requiredHeight = 280
+): boolean => {
+  if (!container || typeof window === 'undefined') return false;
+
+  const rect = container.getBoundingClientRect();
+  const scrollContainer = container.closest('.overflow-y-auto');
+  let spaceBelow = window.innerHeight - rect.bottom;
+  let spaceAbove = rect.top;
+
+  if (scrollContainer) {
+    const containerRect = scrollContainer.getBoundingClientRect();
+    spaceBelow = Math.min(spaceBelow, containerRect.bottom - rect.bottom);
+    spaceAbove = Math.min(spaceAbove, rect.top - containerRect.top);
+  }
+
+  // Only open upward if there is genuinely enough room above to prevent clipping the top,
+  // and there is not enough room below. Otherwise always open downward.
+  return spaceBelow < requiredHeight && spaceAbove >= requiredHeight;
+};
+
 // ----------------------------------------------------------------------
 // 1. TURBO.AZ CUSTOM MULTI-SELECT POPOVER COMPONENT
 // ----------------------------------------------------------------------
@@ -90,6 +113,7 @@ const TurboMultiSelect = React.memo<TurboMultiSelectProps>(({
   id
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Parse currently selected values
@@ -101,6 +125,33 @@ const TurboMultiSelect = React.memo<TurboMultiSelectProps>(({
     }
     return [];
   }, [value]);
+
+  // Calculate dynamic direction based on space below vs above
+  const updateDirection = useCallback(() => {
+    if (!containerRef.current) return;
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      setOpenUpward(false);
+      return;
+    }
+    const shouldOpenUp = calculateDropdownDirection(containerRef.current, 280);
+    setOpenUpward(shouldOpenUp);
+  }, []);
+
+  // Update direction on open and on scroll
+  useEffect(() => {
+    if (!isOpen) return;
+    updateDirection();
+    const scrollContainer = containerRef.current?.closest('.overflow-y-auto');
+    if (scrollContainer) {
+      const handleScroll = () => {
+        updateDirection();
+      };
+      scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+      return () => {
+        scrollContainer.removeEventListener('scroll', handleScroll);
+      };
+    }
+  }, [isOpen, updateDirection]);
 
   // Handle outside click to close popover
   useEffect(() => {
@@ -160,15 +211,20 @@ const TurboMultiSelect = React.memo<TurboMultiSelectProps>(({
   const display = getDisplayText();
 
   return (
-    <div className="relative w-full" ref={containerRef} id={id}>
+    <div className={`relative w-full ${isOpen ? 'z-30' : ''}`} ref={containerRef} id={id}>
       <label className="block text-xs font-black text-slate-500 tracking-wider mb-1.5 select-none">
         {label}
       </label>
 
-      {/* Trigger Button */}
+      {/* Trigger Button - Roomy layout with wrapping support to prevent clipping */}
       <div
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full h-12 bg-slate-50 hover:bg-slate-100/90 border rounded-xl px-3.5 flex items-center justify-between transition-all cursor-pointer select-none shadow-2xs ${
+        onClick={() => {
+          if (!isOpen) {
+            updateDirection();
+          }
+          setIsOpen(!isOpen);
+        }}
+        className={`w-full min-h-12 py-2 bg-slate-50 hover:bg-slate-100/90 border rounded-xl px-2.5 sm:px-3 flex items-center justify-between gap-1.5 transition-all cursor-pointer select-none shadow-2xs ${
           isOpen
             ? 'border-[#1D4ED8] ring-2 ring-blue-500/20 bg-white'
             : selectedValues.length > 0
@@ -176,9 +232,9 @@ const TurboMultiSelect = React.memo<TurboMultiSelectProps>(({
             : 'border-slate-200'
         }`}
       >
-        <div className="flex items-center gap-2 overflow-hidden mr-2">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-1">
           <span
-            className={`truncate text-sm ${
+            className={`text-xs sm:text-sm leading-snug break-words line-clamp-2 ${
               display.isPlaceholder
                 ? 'text-slate-400 font-normal'
                 : 'text-[#0F172A] font-bold'
@@ -187,34 +243,40 @@ const TurboMultiSelect = React.memo<TurboMultiSelectProps>(({
             {display.text}
           </span>
           {selectedValues.length > 1 && (
-            <span className="shrink-0 bg-blue-100 text-[#1D4ED8] text-[10px] font-black px-1.5 py-0.5 rounded-md">
+            <span className="shrink-0 bg-blue-100 text-[#1D4ED8] text-[10px] font-black px-1.5 py-0.5 rounded-md self-center">
               {selectedValues.length}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0 ml-auto">
           {selectedValues.length > 0 && (
             <button
               type="button"
               onClick={handleClear}
-              className="p-1 text-slate-400 hover:text-red-500 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+              className="p-0.5 text-slate-400 hover:text-red-500 hover:bg-slate-100 rounded-full transition-colors cursor-pointer shrink-0"
               title="Təmizlə"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3" />
             </button>
           )}
           <ChevronDown
-            className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+            className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
               isOpen ? 'rotate-180 text-[#1D4ED8]' : ''
             }`}
           />
         </div>
       </div>
 
-      {/* Popover Menu - Compact Width & Smooth Downward Origin Animation */}
+      {/* Popover Menu - Smart Direction (Up/Down) & Smooth Origin Animation */}
       {isOpen && (
-        <div className="absolute z-50 left-0 mt-1.5 w-full max-w-[280px] bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in-0 zoom-in-95 origin-top duration-200 ease-out flex flex-col transition-all">
+        <div
+          className={`absolute z-50 left-0 w-full max-w-[280px] bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200 ease-out flex flex-col transition-all ${
+            openUpward
+              ? 'bottom-full mb-1.5 origin-bottom'
+              : 'top-full mt-1.5 origin-top'
+          }`}
+        >
           
           {/* Top Bar with ONLY red "✕ Sıfırla" button on the LEFT */}
           <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-start">
@@ -293,9 +355,37 @@ const TurboYearSelect = React.memo<TurboYearSelectProps>(({
   id
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const hasValue = Boolean(value && value !== 'all' && value !== '');
+
+  // Calculate dynamic direction based on space below vs above
+  const updateDirection = useCallback(() => {
+    if (!containerRef.current) return;
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      setOpenUpward(false);
+      return;
+    }
+    const shouldOpenUp = calculateDropdownDirection(containerRef.current, 280);
+    setOpenUpward(shouldOpenUp);
+  }, []);
+
+  // Update direction on open and on scroll
+  useEffect(() => {
+    if (!isOpen) return;
+    updateDirection();
+    const scrollContainer = containerRef.current?.closest('.overflow-y-auto');
+    if (scrollContainer) {
+      const handleScroll = () => {
+        updateDirection();
+      };
+      scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+      return () => {
+        scrollContainer.removeEventListener('scroll', handleScroll);
+      };
+    }
+  }, [isOpen, updateDirection]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -329,10 +419,15 @@ const TurboYearSelect = React.memo<TurboYearSelectProps>(({
   };
 
   return (
-    <div className="relative w-full" ref={containerRef} id={id}>
+    <div className={`relative w-full ${isOpen ? 'z-30' : ''}`} ref={containerRef} id={id}>
       <div
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full h-12 bg-slate-50 hover:bg-slate-100/90 border rounded-xl px-3 flex items-center justify-between transition-all cursor-pointer select-none shadow-2xs ${
+        onClick={() => {
+          if (!isOpen) {
+            updateDirection();
+          }
+          setIsOpen(!isOpen);
+        }}
+        className={`w-full min-h-12 py-2 bg-slate-50 hover:bg-slate-100/90 border rounded-xl px-2.5 sm:px-3 flex items-center justify-between gap-1 transition-all cursor-pointer select-none shadow-2xs ${
           isOpen
             ? 'border-[#1D4ED8] ring-2 ring-blue-500/20 bg-white'
             : hasValue
@@ -341,35 +436,41 @@ const TurboYearSelect = React.memo<TurboYearSelectProps>(({
         }`}
       >
         <span
-          className={`truncate text-sm ${
+          className={`text-xs sm:text-sm leading-snug break-words ${
             hasValue ? 'text-[#0F172A] font-bold' : 'text-slate-400 font-normal'
           }`}
         >
           {hasValue ? String(value) : placeholder}
         </span>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0 ml-auto">
           {hasValue && (
             <button
               type="button"
               onClick={handleClear}
-              className="p-1 text-slate-400 hover:text-red-500 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+              className="p-0.5 text-slate-400 hover:text-red-500 hover:bg-slate-100 rounded-full transition-colors cursor-pointer shrink-0"
               title="Təmizlə"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3" />
             </button>
           )}
           <ChevronDown
-            className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+            className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
               isOpen ? 'rotate-180 text-[#1D4ED8]' : ''
             }`}
           />
         </div>
       </div>
 
-      {/* Custom Year Popover - Opens upwards on mobile (bottom-full mb-1.5 origin-bottom), downwards on sm+ (sm:top-full sm:bottom-auto sm:mt-1.5 sm:origin-top) */}
+      {/* Custom Year Popover - Opens upward or downward dynamically based on actual available space */}
       {isOpen && (
-        <div className="absolute z-50 left-0 right-0 bottom-full mb-1.5 origin-bottom sm:top-full sm:bottom-auto sm:mt-1.5 sm:origin-top w-full bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200 ease-out flex flex-col transition-all">
+        <div
+          className={`absolute z-50 left-0 right-0 w-full bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200 ease-out flex flex-col transition-all ${
+            openUpward
+              ? 'bottom-full mb-1.5 origin-bottom'
+              : 'top-full mt-1.5 origin-top'
+          }`}
+        >
           
           {/* Top Bar with ONLY red "✕ Sıfırla" button on the LEFT */}
           <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-start">
@@ -517,16 +618,16 @@ const FilterFieldsContent: React.FC<FilterFieldsContentProps> = ({
                 placeholder="min."
                 value={localFilters.minMileage > 0 ? localFilters.minMileage : ''}
                 onChange={(e) => onLocalChange('minMileage', e.target.value ? Number(e.target.value) : 0)}
-                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
+                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-xs sm:text-sm font-bold rounded-xl px-2.5 sm:px-3 pr-7 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
               />
               {localFilters.minMileage > 0 && (
                 <button
                   type="button"
                   onClick={() => onLocalChange('minMileage', 0)}
-                  className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
+                  className="absolute right-1.5 p-0.5 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
                   title="Təmizlə"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               )}
             </div>
@@ -539,16 +640,16 @@ const FilterFieldsContent: React.FC<FilterFieldsContentProps> = ({
                 placeholder="maks."
                 value={localFilters.maxMileage > 0 ? localFilters.maxMileage : ''}
                 onChange={(e) => onLocalChange('maxMileage', e.target.value ? Number(e.target.value) : 0)}
-                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
+                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-xs sm:text-sm font-bold rounded-xl px-2.5 sm:px-3 pr-7 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
               />
               {localFilters.maxMileage > 0 && (
                 <button
                   type="button"
                   onClick={() => onLocalChange('maxMileage', 0)}
-                  className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
+                  className="absolute right-1.5 p-0.5 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
                   title="Təmizlə"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               )}
             </div>
@@ -569,16 +670,16 @@ const FilterFieldsContent: React.FC<FilterFieldsContentProps> = ({
                 placeholder="min."
                 value={localFilters.minPrice > 0 ? localFilters.minPrice : ''}
                 onChange={(e) => onLocalChange('minPrice', e.target.value ? Number(e.target.value) : 0)}
-                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
+                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-xs sm:text-sm font-bold rounded-xl px-2.5 sm:px-3 pr-7 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
               />
               {localFilters.minPrice > 0 && (
                 <button
                   type="button"
                   onClick={() => onLocalChange('minPrice', 0)}
-                  className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
+                  className="absolute right-1.5 p-0.5 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
                   title="Təmizlə"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               )}
             </div>
@@ -591,16 +692,16 @@ const FilterFieldsContent: React.FC<FilterFieldsContentProps> = ({
                 placeholder="maks."
                 value={localFilters.maxPrice > 0 ? localFilters.maxPrice : ''}
                 onChange={(e) => onLocalChange('maxPrice', e.target.value ? Number(e.target.value) : 0)}
-                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-sm font-bold rounded-xl px-3.5 pr-8 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
+                className="w-full h-12 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 focus:border-[#1D4ED8] focus:bg-white text-[#0F172A] text-xs sm:text-sm font-bold rounded-xl px-2.5 sm:px-3 pr-7 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all placeholder:text-slate-400 placeholder:font-normal shadow-2xs"
               />
               {localFilters.maxPrice > 0 && (
                 <button
                   type="button"
                   onClick={() => onLocalChange('maxPrice', 0)}
-                  className="absolute right-2.5 p-1 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
+                  className="absolute right-1.5 p-0.5 text-slate-400 hover:text-red-500 rounded-full cursor-pointer"
                   title="Təmizlə"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               )}
             </div>
@@ -865,7 +966,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 role="dialog"
                 aria-modal="true"
                 aria-label="Filtrlər paneli"
-                className="hidden md:flex flex-col absolute top-full left-0 mt-2 z-50 w-[460px] max-w-[calc(100vw-32px)] bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150 origin-top-left"
+                className="hidden md:flex flex-col absolute top-full left-0 mt-2 z-50 w-[540px] max-w-[calc(100vw-32px)] bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150 origin-top-left"
               >
                 {/* Header with Title, Active Filter Badge, Sıfırla and Close X */}
                 <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
@@ -901,7 +1002,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 </div>
 
                 {/* Internal Scrollable Filter Fields Body */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[min(520px,calc(100vh-200px))] overscroll-contain">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-4.5 max-h-[min(580px,calc(100vh-180px))] overscroll-contain">
                   <FilterFieldsContent
                     localFilters={localFilters}
                     onLocalChange={handleLocalChange}
