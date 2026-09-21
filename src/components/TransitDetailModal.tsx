@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { motion, AnimatePresence, Variants } from 'motion/react';
 import { TransitCar } from '../types';
 import { WHATSAPP_NUMBER } from '../data/transits';
 import { DEFAULT_VEHICLE_PLACEHOLDER } from '../utils/imageFallback';
@@ -36,7 +37,67 @@ interface TransitDetailModalProps {
   favorites?: string[];
 }
 
-const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
+interface TransitDetailModalContentProps {
+  car: TransitCar;
+  onClose: () => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: (carId: string) => void;
+  allCars?: TransitCar[];
+  onSelectCar?: (car: TransitCar) => void;
+  favorites?: string[];
+}
+
+// Runtime check for mobile view (below md: 768px breakpoint)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(max-width: 767px)');
+    const onChange = () => {
+      setIsMobile(mql.matches);
+    };
+    setIsMobile(mql.matches);
+    if (mql.addEventListener) {
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    } else {
+      mql.addListener(onChange);
+      return () => mql.removeListener(onChange);
+    }
+  }, []);
+
+  return isMobile;
+};
+
+// Turbo.az mobile slide transition variants
+const mobileSlideVariants: Variants = {
+  initial: { 
+    x: '100%' 
+  },
+  animate: { 
+    x: 0,
+    transition: { 
+      duration: 0.55, 
+      ease: 'easeOut' 
+    } 
+  },
+  exit: { 
+    x: '100%',
+    pointerEvents: 'none',
+    transition: { 
+      duration: 0.35, 
+      ease: 'easeIn' 
+    } 
+  }
+};
+
+const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
   car,
   onClose,
   isFavorite = false,
@@ -45,8 +106,10 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   onSelectCar,
   favorites = []
 }) => {
+  const isMobile = useIsMobile();
+
   // Bulletproof Body Scroll Lock when modal is open
-  useBodyScrollLock(Boolean(car));
+  useBodyScrollLock(true);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -277,9 +340,6 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [car?.id, isLightboxOpen, isPhotoGridOpen, closeLightbox, closePhotoGrid, onClose]);
 
-  // Check if car object is valid
-  if (!car) return null;
-
   // Safe fallback values
   const safeTitle = car?.title || 'Ford Transit';
   const safeMake = formatBrandDisplayName(car?.brand || car?.make, car?.title);
@@ -470,19 +530,21 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
   };
 
   return (
-    <>
-      {/* Modal Backdrop (Overlay) */}
+    <motion.div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/85 backdrop-blur-xs overflow-hidden overscroll-contain touch-pan-y"
+      variants={isMobile ? mobileSlideVariants : undefined}
+      initial={isMobile ? "initial" : false}
+      animate={isMobile ? "animate" : undefined}
+      exit={isMobile ? "exit" : undefined}
+      onClick={isPhotoGridOpen || isLightboxOpen ? undefined : onClose}
+    >
+      {/* Modal Window: Full-width on mobile, rounded card on tablet/desktop */}
       <div 
-        className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/85 backdrop-blur-xs overflow-hidden overscroll-contain touch-pan-y"
-        onClick={isPhotoGridOpen || isLightboxOpen ? undefined : onClose}
+        className={`bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 max-w-2xl md:max-w-5xl lg:max-w-6xl w-full h-[100dvh] md:h-auto md:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden my-0 md:my-auto relative md:animate-in md:fade-in md:zoom-in-95 md:duration-350 overscroll-contain ${
+          isPhotoGridOpen || isLightboxOpen ? 'pointer-events-none select-none invisible md:visible' : ''
+        }`}
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Window: Full-width on mobile, rounded card on tablet/desktop */}
-        <div 
-          className={`bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 max-w-2xl md:max-w-5xl lg:max-w-6xl w-full h-[100dvh] md:h-auto md:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden my-0 md:my-auto relative animate-in fade-in zoom-in-95 duration-200 overscroll-contain ${
-            isPhotoGridOpen || isLightboxOpen ? 'pointer-events-none select-none invisible md:visible' : ''
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
           {/* Top Sticky Header */}
           <DetailMobileHeader
             onClose={onClose}
@@ -588,7 +650,6 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
           {/* Floating Bottom Action Bar (Zəng et + WhatsApp) - Yalnız Mobil Rejimdə */}
           <DetailMobileBottomBar whatsappUrl={whatsappUrl} />
         </div>
-      </div>
 
       {/* Mobile-only "Bütün şəkillər" Grid Gallery (Turbo.az Style) */}
       <DetailPhotoGrid
@@ -623,11 +684,11 @@ const TransitDetailModalContent: React.FC<TransitDetailModalProps> = ({
           }
         }}
       />
-    </>
+    </motion.div>
   );
 };
 
-// EXPORTED COMPONENT WITH ERROR BOUNDARY WRAPPER
+// EXPORTED COMPONENT WITH ERROR BOUNDARY WRAPPER & ANIMATE PRESENCE
 export const TransitDetailModal: React.FC<TransitDetailModalProps> = ({
   car,
   onClose,
@@ -637,19 +698,22 @@ export const TransitDetailModal: React.FC<TransitDetailModalProps> = ({
   onSelectCar,
   favorites = []
 }) => {
-  if (!car) return null;
-
   return (
     <DetailModalErrorBoundary onClose={onClose} carTitle={car?.title}>
-      <TransitDetailModalContent 
-        car={car} 
-        onClose={onClose} 
-        isFavorite={isFavorite}
-        onToggleFavorite={onToggleFavorite}
-        allCars={allCars}
-        onSelectCar={onSelectCar}
-        favorites={favorites}
-      />
+      <AnimatePresence>
+        {car && (
+          <TransitDetailModalContent 
+            key="transit-detail-modal-root"
+            car={car} 
+            onClose={onClose} 
+            isFavorite={isFavorite} 
+            onToggleFavorite={onToggleFavorite}
+            allCars={allCars}
+            onSelectCar={onSelectCar}
+            favorites={favorites}
+          />
+        )}
+      </AnimatePresence>
     </DetailModalErrorBoundary>
   );
 };
