@@ -97,6 +97,28 @@ const mobileSlideVariants: Variants = {
   }
 };
 
+// Desktop slide transition variants (aşağıdan yuxarıya daxil olur, çıxarkən əksinə)
+const desktopSlideVariants: Variants = {
+  initial: { 
+    y: '100%' 
+  },
+  animate: { 
+    y: 0,
+    transition: { 
+      duration: 0.45, 
+      ease: 'easeOut' 
+    } 
+  },
+  exit: { 
+    y: '100%',
+    pointerEvents: 'none',
+    transition: { 
+      duration: 0.35, 
+      ease: 'easeIn' 
+    } 
+  }
+};
+
 const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
   car,
   onClose,
@@ -532,15 +554,15 @@ const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
   return (
     <motion.div 
       className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/85 backdrop-blur-xs overflow-hidden overscroll-contain touch-pan-y"
-      variants={isMobile ? mobileSlideVariants : undefined}
-      initial={isMobile ? "initial" : false}
-      animate={isMobile ? "animate" : undefined}
-      exit={isMobile ? "exit" : undefined}
+      variants={isMobile ? mobileSlideVariants : desktopSlideVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       onClick={isPhotoGridOpen || isLightboxOpen ? undefined : onClose}
     >
       {/* Modal Window: Full-width on mobile, rounded card on tablet/desktop */}
       <div 
-        className={`bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 max-w-2xl md:max-w-5xl lg:max-w-6xl w-full h-[100dvh] md:h-auto md:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden my-0 md:my-auto relative md:animate-in md:fade-in md:zoom-in-95 md:duration-350 overscroll-contain ${
+        className={`bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 max-w-2xl md:max-w-5xl lg:max-w-6xl w-full h-[100dvh] md:h-auto md:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden my-0 md:my-auto relative overscroll-contain ${
           isPhotoGridOpen || isLightboxOpen ? 'pointer-events-none select-none invisible md:visible' : ''
         }`}
         onClick={(e) => e.stopPropagation()}
