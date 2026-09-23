@@ -75,7 +75,7 @@ const useIsMobile = () => {
   return isMobile;
 };
 
-// Turbo.az mobile slide transition variants
+// Turbo.az mobile slide transition variants (Outer shell open/close from catalog)
 const mobileSlideVariants: Variants = {
   initial: { 
     x: '100%' 
@@ -97,7 +97,7 @@ const mobileSlideVariants: Variants = {
   }
 };
 
-// Desktop slide transition variants (aşağıdan yuxarıya daxil olur, çıxarkən əksinə)
+// Desktop slide transition variants (Outer shell open/close from catalog)
 const desktopSlideVariants: Variants = {
   initial: { 
     y: '100%' 
@@ -119,48 +119,112 @@ const desktopSlideVariants: Variants = {
   }
 };
 
-const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
+// Mobile car switch variants (similar car slide in from right over previous one)
+const mobileCardSwitchVariants: Variants = {
+  initial: { 
+    x: '100%',
+    zIndex: 2,
+    boxShadow: '-8px 0 24px rgba(0, 0, 0, 0.3)'
+  },
+  animate: { 
+    x: 0,
+    zIndex: 2,
+    boxShadow: 'none',
+    transition: { 
+      duration: 0.55, 
+      ease: 'easeOut' 
+    } 
+  },
+  exit: { 
+    x: '-20%',
+    zIndex: 1,
+    pointerEvents: 'none',
+    transition: { 
+      duration: 0.35, 
+      ease: 'easeIn' 
+    } 
+  }
+};
+
+// Desktop car switch variants (similar car slide up from bottom over previous one)
+const desktopCardSwitchVariants: Variants = {
+  initial: { 
+    y: '100%',
+    zIndex: 2,
+    boxShadow: '0 -8px 24px rgba(0, 0, 0, 0.3)'
+  },
+  animate: { 
+    y: 0,
+    zIndex: 2,
+    boxShadow: 'none',
+    transition: { 
+      duration: 0.45, 
+      ease: 'easeOut' 
+    } 
+  },
+  exit: { 
+    y: 0,
+    opacity: 0.3,
+    zIndex: 1,
+    pointerEvents: 'none',
+    transition: { 
+      duration: 0.35, 
+      ease: 'easeIn' 
+    } 
+  }
+};
+
+// ----------------------------------------------------------------------
+// KEYED INNER CONTENT PANEL (Modal Card & Contents)
+// ----------------------------------------------------------------------
+interface TransitDetailCardProps {
+  car: TransitCar;
+  isMobile: boolean;
+  onClose: () => void;
+  isFavorite: boolean;
+  onToggleFavorite?: (carId: string) => void;
+  allCars: TransitCar[];
+  onSelectSimilarCar: (car: TransitCar) => void;
+  favorites: string[];
+  isPhotoGridOpen: boolean;
+  isLightboxOpen: boolean;
+  openPhotoGrid: () => void;
+  openLightbox: (source?: 'detail' | 'grid', index?: number) => void;
+  parentActiveImageIndex: number;
+  onParentActiveImageChange: (index: number) => void;
+}
+
+const TransitDetailCard: React.FC<TransitDetailCardProps> = ({
   car,
+  isMobile,
   onClose,
-  isFavorite = false,
+  isFavorite,
   onToggleFavorite,
-  allCars = [],
-  onSelectCar,
-  favorites = []
+  allCars,
+  onSelectSimilarCar,
+  favorites,
+  isPhotoGridOpen,
+  isLightboxOpen,
+  openPhotoGrid,
+  openLightbox,
+  parentActiveImageIndex,
+  onParentActiveImageChange
 }) => {
-  const isMobile = useIsMobile();
-
-  // Bulletproof Body Scroll Lock when modal is open
-  useBodyScrollLock(true);
-
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  // Overlay (grid/lightbox) states
-  const [isPhotoGridOpen, setIsPhotoGridOpen] = useState(false);
-  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
-  const [lightboxSource, setLightboxSource] = useState<'detail' | 'grid'>('detail');
-  const photoGridScrollPositionRef = useRef<number>(0);
-
-  // Reset active image & scroll to top when car changes
+  // Sync with parent activeImageIndex when updated externally (e.g. from lightbox)
   useEffect(() => {
-    setActiveImageIndex(0);
-    setCopied(false);
-    setIsPhotoGridOpen(false);
-    setIsLightboxOpen(false);
-    setLightboxSource('detail');
-    photoGridScrollPositionRef.current = 0;
+    setActiveImageIndex(parentActiveImageIndex);
+  }, [parentActiveImageIndex]);
+
+  // Ensure scroll container starts at top on mount
+  useEffect(() => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
       scrollContainerRef.current.scrollTop = 0;
     }
-    requestAnimationFrame(() => {
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = 0;
-      }
-    });
-  }, [car?.id]);
+  }, []);
 
   // Safe Image Array Extraction
   const imagesList = useMemo(() => {
@@ -197,6 +261,331 @@ const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
       prefetchCarouselWindow(imagesList, activeImageIndex);
     }
   }, [imagesList, activeImageIndex]);
+
+  // Safe fallback values
+  const safeTitle = car?.title || 'Ford Transit';
+  const safeMake = formatBrandDisplayName(car?.brand || car?.make, car?.title);
+  const safeModel = formatModelDisplayName(car?.model, car?.title);
+  const safeYear = car?.year ? String(car.year) : '';
+  const safePrice = formatNumberSafe(car?.price, '0');
+  const safeMileage = formatNumberSafe(car?.mileage, '0');
+  const safeEngine = car?.engine ? String(car.engine).trim() : '';
+  const safeFuelType = car?.fuelType ? String(car.fuelType).trim() : '';
+  const safeTransmission = car?.transmission ? String(car.transmission).trim() : '';
+  const safeBodyType = car?.bodyType ? String(car.bodyType).trim() : '';
+  const safeColor = car?.color ? String(car.color).trim() : '';
+  const safeWheelDrive = car?.wheelDrive ? String(car.wheelDrive).trim() : '';
+  const safeBaseLength = car?.baseLength ? String(car.baseLength).trim() : '';
+  const safeRoofHeight = car?.roofHeight ? String(car.roofHeight).trim() : '';
+  const safeLocation = car?.city || car?.location || 'Bakı';
+  const safeCondition = car?.condition ? String(car.condition).trim() : '';
+  const safeHp = car?.hp ? `${car.hp} a.g.` : '';
+  const safeSeatCount = car?.seatCount ? String(car.seatCount).trim() : '';
+
+  // Subtitle format without horsepower
+  const engineSubtitle = safeEngine ? (safeEngine.toLowerCase().includes('l') ? safeEngine : `${safeEngine} L`) : '';
+  const vehicleMainTitle = [
+    safeTitle,
+    engineSubtitle,
+    safeYear ? `${safeYear} il` : ''
+  ].filter(Boolean).join(', ');
+
+  const carDirectLink = useMemo(() => {
+    if (typeof window === 'undefined' || !car?.id) {
+      return `https://kosalarauto.az/?car=${car?.id || ''}`;
+    }
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('car', car.id);
+      return url.toString();
+    } catch {
+      return `${window.location.origin}/?car=${encodeURIComponent(car.id)}`;
+    }
+  }, [car?.id]);
+
+  const shareUrl = carDirectLink;
+
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${safeTitle} - Kosalar Auto`,
+          text: `${safeTitle} (${safeYear}-ci il) - ${safePrice} AZN. Kosalar Auto:`,
+          url: shareUrl,
+        });
+        return;
+      } catch (err) {
+        // Fallback to clipboard
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (e) {
+      // Fallback
+    }
+  };
+
+  const whatsappMsg = useMemo(() => {
+    const rawLines = [
+      `Salam! Kosalar Auto, bu avtomobil haqqında ətraflı məlumat almaq istəyirəm:`,
+      ``,
+      `🚗 Avtomobil: ${safeTitle}`,
+      safeYear ? `📅 İl: ${safeYear}` : '',
+      `💰 Qiymət: ${safePrice} AZN`,
+      safeMileage && safeMileage !== '0' ? `🛣️ Yürüş: ${safeMileage} km` : '',
+      safeEngine ? `⚡ Mühərrik: ${engineSubtitle}` : '',
+      car?.vinCode ? `🔢 VIN: ${car.vinCode}` : '',
+      ``,
+      `🔗 Elanın linki:`,
+      carDirectLink
+    ];
+
+    const cleanedLines = rawLines.filter(line => typeof line === 'string' && (line !== '' || line === rawLines[1] || line === rawLines[8]));
+
+    return encodeURIComponent(cleanedLines.join('\n'));
+  }, [safeTitle, safeYear, safePrice, safeMileage, engineSubtitle, car?.vinCode, carDirectLink]);
+
+  const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${whatsappMsg}`;
+
+  // Safe Features Parser (Only returns active/true features)
+  const activeFeaturesList = useMemo(() => {
+    return parseAndFilterFeatures(car?.features);
+  }, [car?.features]);
+
+  // Turbo.az Style: Similar Cars (Bənzər elanlar) Algorithm
+  const similarCars = useMemo(() => {
+    if (!allCars || allCars.length === 0 || !car) return [];
+    
+    // Filter out current car and sold cars
+    const activeInventory = allCars.filter(c => c.id !== car.id && c.status !== 'sold');
+    if (activeInventory.length === 0) return [];
+
+    const currentBrand = (car.brand || car.make || '').toLowerCase();
+    const currentModel = (car.model || '').toLowerCase();
+    const currentBody = (car.bodyType || '').toLowerCase();
+    const currentFuel = (car.fuelType || '').toLowerCase();
+    const currentPrice = car.price || 0;
+
+    const scored = activeInventory.map(item => {
+      let score = 0;
+      const itemBrand = (item.brand || item.make || '').toLowerCase();
+      const itemModel = (item.model || '').toLowerCase();
+      const itemBody = (item.bodyType || '').toLowerCase();
+      const itemFuel = (item.fuelType || '').toLowerCase();
+      const itemPrice = item.price || 0;
+
+      // 1. Same Brand (+50 pts)
+      if (currentBrand && itemBrand && (currentBrand === itemBrand || currentBrand.includes(itemBrand) || itemBrand.includes(currentBrand))) {
+        score += 50;
+      }
+      // 2. Same Model (+40 pts)
+      if (currentModel && itemModel && (currentModel === itemModel || currentModel.includes(itemModel) || itemModel.includes(currentModel))) {
+        score += 40;
+      }
+      // 3. Same Body Type (+25 pts)
+      if (currentBody && itemBody && currentBody === itemBody) {
+        score += 25;
+      }
+      // 4. Same Fuel Type (+15 pts)
+      if (currentFuel && itemFuel && currentFuel === itemFuel) {
+        score += 15;
+      }
+      // 5. Close Price Range (+20 pts for <= 20% diff, +10 for <= 40%)
+      if (currentPrice > 0 && itemPrice > 0) {
+        const diffRatio = Math.abs(currentPrice - itemPrice) / currentPrice;
+        if (diffRatio <= 0.2) score += 20;
+        else if (diffRatio <= 0.4) score += 10;
+      }
+      // 6. Base Length match (+10 pts)
+      if (car.baseLength && item.baseLength && car.baseLength === item.baseLength) {
+        score += 10;
+      }
+
+      return { car: item, score };
+    });
+
+    // Sort by relevance score descending
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 6).map(s => s.car);
+  }, [allCars, car]);
+
+  return (
+    <motion.div
+      className="absolute inset-0 w-full h-full bg-white flex flex-col overflow-hidden overscroll-contain"
+      variants={isMobile ? mobileCardSwitchVariants : desktopCardSwitchVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+      {/* Top Sticky Header */}
+      <DetailMobileHeader
+        onClose={onClose}
+        onShare={handleShare}
+        copied={copied}
+        isFavorite={isFavorite}
+        onToggleFavorite={() => {
+          if (car?.id && onToggleFavorite) {
+            onToggleFavorite(car.id);
+          }
+        }}
+      />
+
+      {/* Modal Scrollable Content */}
+      <div ref={scrollContainerRef} className="overflow-y-auto flex-1 min-h-0 bg-white block w-full overscroll-contain">
+        {/* RESPONSIVE HERO SECTION */}
+        <div className="flex flex-col md:flex-row w-full bg-white border-b border-slate-200">
+          {/* Sol Sütun (Şəkil Sahəsi - Desktopda 60% enində, h-[500px], tam qara arxafon) */}
+          <div className="w-full md:w-[58%] lg:w-[60%] shrink-0 bg-black flex items-center justify-center overflow-hidden relative">
+            <TurboImageSlider
+              key={`modal-slider-${car?.id}`}
+              images={imagesList}
+              activeImageIndex={activeImageIndex}
+              onIndexChange={(idx) => {
+                setActiveImageIndex(idx);
+                onParentActiveImageChange(idx);
+              }}
+              safeTitle={safeTitle}
+              onImageClick={(clickedIndex) => {
+                const idx = typeof clickedIndex === 'number' ? clickedIndex : activeImageIndex;
+                setActiveImageIndex(idx);
+                onParentActiveImageChange(idx);
+                openLightbox('detail', idx);
+              }}
+              onOpenPhotoGrid={openPhotoGrid}
+              disabledKeyNav={isLightboxOpen || isPhotoGridOpen}
+              className="w-full aspect-[4/3] md:aspect-auto md:h-[500px] flex items-center justify-center bg-black"
+            />
+          </div>
+
+          {/* Sağ Sütun (Məlumat və Əlaqə Sahəsi - YALNIZ Desktopda 40% enində) */}
+          <DetailDesktopSidebar
+            safePrice={safePrice}
+            vehicleMainTitle={vehicleMainTitle}
+            safeMileage={safeMileage}
+            safeLocation={safeLocation}
+            safeYear={safeYear}
+            safeEngine={safeEngine}
+            safeHp={safeHp}
+            safeFuelType={safeFuelType}
+            safeTransmission={safeTransmission}
+            safeWheelDrive={safeWheelDrive}
+            safeBodyType={safeBodyType}
+            safeColor={safeColor}
+            safeSeatCount={safeSeatCount}
+            safeBaseLength={safeBaseLength}
+            safeCondition={safeCondition}
+            whatsappUrl={whatsappUrl}
+          />
+        </div>
+
+        {/* Məzmun Gövdəsi: Turbo.az strukturu */}
+        <div className="p-4 sm:p-5 md:p-6 pb-20 md:pb-6 space-y-4 sm:space-y-5 max-w-5xl mx-auto block w-full">
+          {/* 1. BAŞLIQ VƏ QİYMƏT (YALNIZ MOBİLDƏ GÖSTƏRİLİR) */}
+          <DetailMobileTitleBlock
+            safePrice={safePrice}
+            vehicleMainTitle={vehicleMainTitle}
+            safeMileage={safeMileage}
+          />
+
+          {/* 2. XÜSUSİYYƏTLƏR CƏDVƏLİ (YALNIZ MOBİLDƏ GÖSTƏRİLİR - TURBO.AZ STİLİ) */}
+          <DetailMobileSpecs
+            safeLocation={safeLocation}
+            safeMake={safeMake}
+            safeModel={safeModel}
+            safeYear={safeYear}
+            safeBodyType={safeBodyType}
+            safeSeatCount={safeSeatCount}
+            safeColor={safeColor}
+            safeEngine={safeEngine}
+            safeHp={safeHp}
+            safeFuelType={safeFuelType}
+            safeMileage={safeMileage}
+            safeTransmission={safeTransmission}
+            safeWheelDrive={safeWheelDrive}
+            safeBaseLength={safeBaseLength}
+            safeCondition={safeCondition}
+          />
+
+          {/* 3. QEYD VƏ TƏSVİR + 4. TƏCHİZAT + AVTOSALON MƏLUMATI */}
+          <DetailFeaturesAndShowroom
+            description={car?.description}
+            activeFeaturesList={activeFeaturesList}
+          />
+
+          {/* 5. BƏNZƏR ELANLAR (TURBO.AZ STYLE SIMILAR ADS) */}
+          <DetailSimilarCars
+            similarCars={similarCars}
+            favorites={favorites}
+            onToggleFavorite={onToggleFavorite}
+            onSelectSimilarCar={onSelectSimilarCar}
+          />
+        </div>
+      </div>
+
+      {/* Floating Bottom Action Bar (Zəng et + WhatsApp) - Yalnız Mobil Rejimdə */}
+      <DetailMobileBottomBar whatsappUrl={whatsappUrl} />
+    </motion.div>
+  );
+};
+
+// ----------------------------------------------------------------------
+// PERSISTENT OUTER SHELL (Backdrop, Open/Close, Scroll Lock, Esc & Popstate)
+// ----------------------------------------------------------------------
+const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
+  car,
+  onClose,
+  isFavorite = false,
+  onToggleFavorite,
+  allCars = [],
+  onSelectCar,
+  favorites = []
+}) => {
+  const isMobile = useIsMobile();
+
+  // Bulletproof Body Scroll Lock when modal is open (exact single instance on outer shell)
+  useBodyScrollLock(true);
+
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  // Overlay (grid/lightbox) states
+  const [isPhotoGridOpen, setIsPhotoGridOpen] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxSource, setLightboxSource] = useState<'detail' | 'grid'>('detail');
+  const photoGridScrollPositionRef = useRef<number>(0);
+
+  // Reset active image & overlay states when car changes
+  useEffect(() => {
+    setActiveImageIndex(0);
+    setIsPhotoGridOpen(false);
+    setIsLightboxOpen(false);
+    setLightboxSource('detail');
+    photoGridScrollPositionRef.current = 0;
+  }, [car?.id]);
+
+  // Safe Image Array Extraction for overlays
+  const imagesList = useMemo(() => {
+    if (!car) return [];
+    const list: string[] = [];
+    
+    // Add primaryImage first if valid
+    if (car?.primaryImage && typeof car.primaryImage === 'string' && car.primaryImage.trim().length > 0) {
+      list.push(car.primaryImage.trim());
+    }
+
+    // Add secondary images safely
+    if (car?.images && Array.isArray(car.images)) {
+      for (const img of car.images) {
+        if (typeof img === 'string' && img.trim().length > 0 && !list.includes(img.trim())) {
+          list.push(img.trim());
+        }
+      }
+    }
+
+    return list.length > 0 ? list : [DEFAULT_VEHICLE_PLACEHOLDER];
+  }, [car]);
 
   // URL və tarixçə ilə sinxronizasiya (həm açılışda, həm də popstate zamanı)
   const syncOverlaysFromUrl = useCallback(() => {
@@ -362,25 +751,12 @@ const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [car?.id, isLightboxOpen, isPhotoGridOpen, closeLightbox, closePhotoGrid, onClose]);
 
-  // Safe fallback values
+  // Safe fallback values for overlays
   const safeTitle = car?.title || 'Ford Transit';
-  const safeMake = formatBrandDisplayName(car?.brand || car?.make, car?.title);
-  const safeModel = formatModelDisplayName(car?.model, car?.title);
   const safeYear = car?.year ? String(car.year) : '';
   const safePrice = formatNumberSafe(car?.price, '0');
   const safeMileage = formatNumberSafe(car?.mileage, '0');
   const safeEngine = car?.engine ? String(car.engine).trim() : '';
-  const safeFuelType = car?.fuelType ? String(car.fuelType).trim() : '';
-  const safeTransmission = car?.transmission ? String(car.transmission).trim() : '';
-  const safeBodyType = car?.bodyType ? String(car.bodyType).trim() : '';
-  const safeColor = car?.color ? String(car.color).trim() : '';
-  const safeWheelDrive = car?.wheelDrive ? String(car.wheelDrive).trim() : '';
-  const safeBaseLength = car?.baseLength ? String(car.baseLength).trim() : '';
-  const safeRoofHeight = car?.roofHeight ? String(car.roofHeight).trim() : '';
-  const safeLocation = car?.city || car?.location || 'Bakı';
-  const safeCondition = car?.condition ? String(car.condition).trim() : '';
-  const safeHp = car?.hp ? `${car.hp} a.g.` : '';
-  const safeSeatCount = car?.seatCount ? String(car.seatCount).trim() : '';
 
   // Subtitle format without horsepower
   const engineSubtitle = safeEngine ? (safeEngine.toLowerCase().includes('l') ? safeEngine : `${safeEngine} L`) : '';
@@ -421,31 +797,6 @@ const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
     }
   }, [car?.id]);
 
-  const shareUrl = carDirectLink;
-
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `${safeTitle} - Kosalar Auto`,
-          text: `${safeTitle} (${safeYear}-ci il) - ${safePrice} AZN. Kosalar Auto:`,
-          url: shareUrl,
-        });
-        return;
-      } catch (err) {
-        // Fallback to clipboard
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch (e) {
-      // Fallback
-    }
-  };
-
   const whatsappMsg = useMemo(() => {
     const rawLines = [
       `Salam! Kosalar Auto, bu avtomobil haqqında ətraflı məlumat almaq istəyirəm:`,
@@ -468,69 +819,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
 
   const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${whatsappMsg}`;
 
-  // Safe Features Parser (Only returns active/true features)
-  const activeFeaturesList = useMemo(() => {
-    return parseAndFilterFeatures(car?.features);
-  }, [car?.features]);
-
-  // Turbo.az Style: Similar Cars (Bənzər elanlar) Algorithm
-  const similarCars = useMemo(() => {
-    if (!allCars || allCars.length === 0 || !car) return [];
-    
-    // Filter out current car and sold cars
-    const activeInventory = allCars.filter(c => c.id !== car.id && c.status !== 'sold');
-    if (activeInventory.length === 0) return [];
-
-    const currentBrand = (car.brand || car.make || '').toLowerCase();
-    const currentModel = (car.model || '').toLowerCase();
-    const currentBody = (car.bodyType || '').toLowerCase();
-    const currentFuel = (car.fuelType || '').toLowerCase();
-    const currentPrice = car.price || 0;
-
-    const scored = activeInventory.map(item => {
-      let score = 0;
-      const itemBrand = (item.brand || item.make || '').toLowerCase();
-      const itemModel = (item.model || '').toLowerCase();
-      const itemBody = (item.bodyType || '').toLowerCase();
-      const itemFuel = (item.fuelType || '').toLowerCase();
-      const itemPrice = item.price || 0;
-
-      // 1. Same Brand (+50 pts)
-      if (currentBrand && itemBrand && (currentBrand === itemBrand || currentBrand.includes(itemBrand) || itemBrand.includes(currentBrand))) {
-        score += 50;
-      }
-      // 2. Same Model (+40 pts)
-      if (currentModel && itemModel && (currentModel === itemModel || currentModel.includes(itemModel) || itemModel.includes(currentModel))) {
-        score += 40;
-      }
-      // 3. Same Body Type (+25 pts)
-      if (currentBody && itemBody && currentBody === itemBody) {
-        score += 25;
-      }
-      // 4. Same Fuel Type (+15 pts)
-      if (currentFuel && itemFuel && currentFuel === itemFuel) {
-        score += 15;
-      }
-      // 5. Close Price Range (+20 pts for <= 20% diff, +10 for <= 40%)
-      if (currentPrice > 0 && itemPrice > 0) {
-        const diffRatio = Math.abs(currentPrice - itemPrice) / currentPrice;
-        if (diffRatio <= 0.2) score += 20;
-        else if (diffRatio <= 0.4) score += 10;
-      }
-      // 6. Base Length match (+10 pts)
-      if (car.baseLength && item.baseLength && car.baseLength === item.baseLength) {
-        score += 10;
-      }
-
-      return { car: item, score };
-    });
-
-    // Sort by relevance score descending
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 6).map(s => s.car);
-  }, [allCars, car]);
-
-  const handleSelectSimilarCar = (simCar: TransitCar) => {
+  const handleSelectSimilarCar = useCallback((simCar: TransitCar) => {
     setActiveImageIndex(0);
     setIsPhotoGridOpen(false);
     setIsLightboxOpen(false);
@@ -540,16 +829,7 @@ const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
     if (onSelectCar) {
       onSelectCar(simCar);
     }
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
-      scrollContainerRef.current.scrollTop = 0;
-    }
-    requestAnimationFrame(() => {
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = 0;
-      }
-    });
-  };
+  }, [onSelectCar]);
 
   return (
     <motion.div 
@@ -560,118 +840,33 @@ const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
       exit="exit"
       onClick={isPhotoGridOpen || isLightboxOpen ? undefined : onClose}
     >
-      {/* Modal Window: Full-width on mobile, rounded card on tablet/desktop */}
+      {/* Modal Container: Fixed bounds for desktop & mobile, acts as relative anchor for absolute cards */}
       <div 
-        className={`bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 max-w-2xl md:max-w-5xl lg:max-w-6xl w-full h-[100dvh] md:h-auto md:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden my-0 md:my-auto relative overscroll-contain ${
+        className={`relative max-w-2xl md:max-w-5xl lg:max-w-6xl w-full h-[100dvh] md:h-[90vh] max-h-[100dvh] md:max-h-[90vh] bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 overflow-hidden my-0 md:my-auto ${
           isPhotoGridOpen || isLightboxOpen ? 'pointer-events-none select-none invisible md:visible' : ''
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-          {/* Top Sticky Header */}
-          <DetailMobileHeader
+        <AnimatePresence initial={false}>
+          <TransitDetailCard
+            key={car.id}
+            car={car}
+            isMobile={isMobile}
             onClose={onClose}
-            onShare={handleShare}
-            copied={copied}
             isFavorite={isFavorite}
-            onToggleFavorite={() => {
-              if (car?.id && onToggleFavorite) {
-                onToggleFavorite(car.id);
-              }
-            }}
+            onToggleFavorite={onToggleFavorite}
+            allCars={allCars}
+            onSelectSimilarCar={handleSelectSimilarCar}
+            favorites={favorites}
+            isPhotoGridOpen={isPhotoGridOpen}
+            isLightboxOpen={isLightboxOpen}
+            openPhotoGrid={openPhotoGrid}
+            openLightbox={openLightbox}
+            parentActiveImageIndex={activeImageIndex}
+            onParentActiveImageChange={setActiveImageIndex}
           />
-
-          {/* Modal Scrollable Content */}
-          <div ref={scrollContainerRef} className="overflow-y-auto flex-1 min-h-0 bg-white block w-full overscroll-contain">
-            {/* RESPONSIVE HERO SECTION */}
-            <div className="flex flex-col md:flex-row w-full bg-white border-b border-slate-200">
-              {/* Sol Sütun (Şəkil Sahəsi - Desktopda 60% enində, h-[500px], tam qara arxafon) */}
-              <div className="w-full md:w-[58%] lg:w-[60%] shrink-0 bg-black flex items-center justify-center overflow-hidden relative">
-                <TurboImageSlider
-                  key={`modal-slider-${car?.id}`}
-                  images={imagesList}
-                  activeImageIndex={activeImageIndex}
-                  onIndexChange={setActiveImageIndex}
-                  safeTitle={safeTitle}
-                  onImageClick={(clickedIndex) => {
-                    if (typeof clickedIndex === 'number') {
-                      setActiveImageIndex(clickedIndex);
-                    }
-                    openLightbox('detail');
-                  }}
-                  onOpenPhotoGrid={openPhotoGrid}
-                  disabledKeyNav={isLightboxOpen || isPhotoGridOpen}
-                  className="w-full aspect-[4/3] md:aspect-auto md:h-[500px] flex items-center justify-center bg-black"
-                />
-              </div>
-
-              {/* Sağ Sütun (Məlumat və Əlaqə Sahəsi - YALNIZ Desktopda 40% enində) */}
-              <DetailDesktopSidebar
-                safePrice={safePrice}
-                vehicleMainTitle={vehicleMainTitle}
-                safeMileage={safeMileage}
-                safeLocation={safeLocation}
-                safeYear={safeYear}
-                safeEngine={safeEngine}
-                safeHp={safeHp}
-                safeFuelType={safeFuelType}
-                safeTransmission={safeTransmission}
-                safeWheelDrive={safeWheelDrive}
-                safeBodyType={safeBodyType}
-                safeColor={safeColor}
-                safeSeatCount={safeSeatCount}
-                safeBaseLength={safeBaseLength}
-                safeCondition={safeCondition}
-                whatsappUrl={whatsappUrl}
-              />
-            </div>
-
-            {/* Məzmun Gövdəsi: Turbo.az strukturu */}
-            <div className="p-4 sm:p-5 md:p-6 pb-20 md:pb-6 space-y-4 sm:space-y-5 max-w-5xl mx-auto block w-full">
-              {/* 1. BAŞLIQ VƏ QİYMƏT (YALNIZ MOBİLDƏ GÖSTƏRİLİR) */}
-              <DetailMobileTitleBlock
-                safePrice={safePrice}
-                vehicleMainTitle={vehicleMainTitle}
-                safeMileage={safeMileage}
-              />
-
-              {/* 2. XÜSUSİYYƏTLƏR CƏDVƏLİ (YALNIZ MOBİLDƏ GÖSTƏRİLİR - TURBO.AZ STİLİ) */}
-              <DetailMobileSpecs
-                safeLocation={safeLocation}
-                safeMake={safeMake}
-                safeModel={safeModel}
-                safeYear={safeYear}
-                safeBodyType={safeBodyType}
-                safeSeatCount={safeSeatCount}
-                safeColor={safeColor}
-                safeEngine={safeEngine}
-                safeHp={safeHp}
-                safeFuelType={safeFuelType}
-                safeMileage={safeMileage}
-                safeTransmission={safeTransmission}
-                safeWheelDrive={safeWheelDrive}
-                safeBaseLength={safeBaseLength}
-                safeCondition={safeCondition}
-              />
-
-              {/* 3. QEYD VƏ TƏSVİR + 4. TƏCHİZAT + AVTOSALON MƏLUMATI */}
-              <DetailFeaturesAndShowroom
-                description={car?.description}
-                activeFeaturesList={activeFeaturesList}
-              />
-
-              {/* 5. BƏNZƏR ELANLAR (TURBO.AZ STYLE SIMILAR ADS) */}
-              <DetailSimilarCars
-                similarCars={similarCars}
-                favorites={favorites}
-                onToggleFavorite={onToggleFavorite}
-                onSelectSimilarCar={handleSelectSimilarCar}
-              />
-            </div>
-          </div>
-
-          {/* Floating Bottom Action Bar (Zəng et + WhatsApp) - Yalnız Mobil Rejimdə */}
-          <DetailMobileBottomBar whatsappUrl={whatsappUrl} />
-        </div>
+        </AnimatePresence>
+      </div>
 
       {/* Mobile-only "Bütün şəkillər" Grid Gallery (Turbo.az Style) */}
       <DetailPhotoGrid
