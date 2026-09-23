@@ -61,3 +61,10 @@ export interface TestDriveFormData {
   preferredTime: string;
   note: string;
 }
+
+declare global {
+  interface Window {
+    __INITIAL_CARS__?: TransitCar[];
+  }
+}
+

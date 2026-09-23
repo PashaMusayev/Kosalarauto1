@@ -165,9 +165,9 @@ export function mapCarToSupabaseRow(car: TransitCar): Record<string, unknown> {
 }
 
 /**
- * Fetch cars directly from Supabase Database with timeout protection and retry mechanism
+ * Fetch cars directly from Supabase Database with timeout protection and retry mechanism (fallback only)
  */
-export async function fetchCarsFromSupabase(maxRetries = 2): Promise<{ success: boolean; data?: TransitCar[]; error?: string }> {
+export async function fetchCarsFromSupabase(maxRetries = 1, timeoutMs = 5000): Promise<{ success: boolean; data?: TransitCar[]; error?: string }> {
   const client = getSupabaseClient();
   let lastError = '';
 
@@ -175,7 +175,7 @@ export async function fetchCarsFromSupabase(maxRetries = 2): Promise<{ success: 
     try {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) => {
-        timer = setTimeout(() => resolve({ data: null, error: { message: 'Supabase sorğu vaxtı bitdi (Timeout - 12s)' } }), 12000);
+        timer = setTimeout(() => resolve({ data: null, error: { message: `Supabase sorğu vaxtı bitdi (Timeout - ${Math.round(timeoutMs / 1000)}s)` } }), timeoutMs);
       });
 
       const queryPromise = client

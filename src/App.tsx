@@ -42,6 +42,42 @@ const DEFAULT_FILTERS: FilterState = {
 };
 
 const CARS_PER_PAGE = 12;
+const CATALOG_STORAGE_KEY = 'kosalar_catalog_cars_v1';
+
+function getInitialTransits(): { cars: TransitCar[]; hasCachedData: boolean } {
+  // 1. First priority: Server-injected window.__INITIAL_CARS__
+  if (typeof window !== 'undefined' && Array.isArray(window.__INITIAL_CARS__) && window.__INITIAL_CARS__.length > 0) {
+    return { cars: window.__INITIAL_CARS__, hasCachedData: true };
+  }
+
+  // 2. Second priority: localStorage cache of the last successful list
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(CATALOG_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return { cars: parsed, hasCachedData: true };
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read cached cars from localStorage:', e);
+    }
+  }
+
+  // 3. Otherwise empty
+  return { cars: [], hasCachedData: false };
+}
+
+function saveTransitsToLocalCache(cars: TransitCar[]) {
+  if (typeof window !== 'undefined' && Array.isArray(cars) && cars.length > 0) {
+    try {
+      localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(cars));
+    } catch (e) {
+      console.warn('Could not save cars to localStorage cache:', e);
+    }
+  }
+}
 
 const normalizePath = (p: string) => {
   try {
@@ -65,8 +101,17 @@ export default function App() {
   });
   const [navigationDirection, setNavigationDirection] = useState<'forward' | 'back'>('forward');
 
-  const [transits, setTransits] = useState<TransitCar[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // Stale-while-revalidate initial state: instant render from server injection or localStorage
+  const [initialCatalog] = useState(() => {
+    const init = getInitialTransits();
+    if (init.hasCachedData) {
+      saveTransitsToLocalCache(init.cars);
+    }
+    return init;
+  });
+
+  const [transits, setTransits] = useState<TransitCar[]>(initialCatalog.cars);
+  const [isLoading, setIsLoading] = useState<boolean>(!initialCatalog.hasCachedData);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -149,46 +194,52 @@ export default function App() {
 
     const fetchLatestCars = async (isInitial = false) => {
       if (!isMounted) return;
-      // Only show full loading skeleton on the very first initial load when there are no cached cars
-      if (isInitial) {
+      // Show full loading skeleton only when there is genuinely no cached data from any source
+      if (isInitial && transitsRef.current.length === 0) {
         setIsLoading(true);
       }
 
       try {
-        // 1. Try fetching directly from Supabase with timeout
-        try {
-          const sbRes = await fetchCarsFromSupabase();
-          if (isMounted && sbRes.success && Array.isArray(sbRes.data) && sbRes.data.length > 0) {
-            setTransits(sbRes.data);
-            setIsLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.warn('Supabase direct fetch warning:', e);
-        }
-
-        // 2. Fetch from backend API using shared helper
+        // 1. Primary source: fetch from GET /api/cars (server reads Supabase and maintains authoritative cache)
         try {
           const apiRes = await fetchAllCarsFromApi();
           if (isMounted && apiRes.success && Array.isArray(apiRes.cars) && apiRes.cars.length > 0) {
             setTransits(apiRes.cars);
+            saveTransitsToLocalCache(apiRes.cars);
             setIsLoading(false);
             return;
           }
         } catch (err) {
           console.warn('Backend API cars fetch notice:', err);
         }
+
+        // 2. Fallback: try fetching directly from Supabase with short timeout (5s) and at most 1 retry
+        try {
+          const sbRes = await fetchCarsFromSupabase(1, 5000);
+          if (isMounted && sbRes.success && Array.isArray(sbRes.data) && sbRes.data.length > 0) {
+            setTransits(sbRes.data);
+            saveTransitsToLocalCache(sbRes.data);
+            setIsLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.warn('Supabase direct fetch fallback notice:', e);
+        }
       } catch (err) {
         console.warn('Cars sync process error:', err);
       } finally {
         if (isMounted) {
-          setTransits(prev => (prev.length > 0 ? prev : INITIAL_TRANSITS));
+          setTransits(prev => {
+            if (prev.length > 0) return prev;
+            saveTransitsToLocalCache(INITIAL_TRANSITS);
+            return INITIAL_TRANSITS;
+          });
           setIsLoading(false);
         }
       }
     };
 
-    // Initial fetch on mount only (cached in state)
+    // Initial background revalidation on mount
     fetchLatestCars(true);
 
     // BroadcastChannel for instant real-time sync across tabs and windows (only on explicit car updates)
@@ -199,6 +250,7 @@ export default function App() {
         if (event.data && event.data.type === 'CARS_UPDATED') {
           if (Array.isArray(event.data.cars) && event.data.cars.length > 0) {
             setTransits(event.data.cars);
+            saveTransitsToLocalCache(event.data.cars);
           } else {
             fetchLatestCars(false);
           }

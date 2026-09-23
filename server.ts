@@ -456,6 +456,104 @@ function saveCarsToDisk(cars: unknown[]) {
 }
 
 /**
+ * XSS-safe JSON serialization for script tag embedding.
+ * Escapes <, >, &, U+2028, and U+2029 to prevent script break-out.
+ */
+function serializeForScript(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+/**
+ * Prepares public active catalog fields from the disk cache for client HTML injection.
+ * If disk cache is unavailable or empty, returns null so the client falls back normally.
+ */
+function getSanitizedCarsForInjection(): Record<string, unknown>[] | null {
+  try {
+    const rawCars = getCarsFromDisk();
+    if (!Array.isArray(rawCars) || rawCars.length === 0) {
+      return null;
+    }
+    return rawCars.map(c => {
+      const car = c as Record<string, any>;
+      const rawBrandInput = String(car.brand || car.make || '');
+      const brand = rawBrandInput.toLowerCase().includes('mercedes')
+        ? 'Mercedes'
+        : (rawBrandInput || ((car.title as string)?.toLowerCase().includes('mercedes') ? 'Mercedes' : 'Ford'));
+      const model = String(car.model || ((car.title as string)?.toLowerCase().includes('sprinter') ? 'Sprinter' : 'Transit'));
+      const city = String(car.city || car.location || 'Bakı');
+
+      return {
+        id: String(car.id),
+        title: String(car.title || `${brand} ${model}`),
+        brand,
+        make: brand,
+        model,
+        city,
+        location: city,
+        year: Number(car.year) || 2011,
+        price: Number(car.price) || 0,
+        mileage: Number(car.mileage) || 0,
+        engine: String(car.engine ?? '').trim(),
+        hp: Number(car.hp || car.horsePower || 0),
+        horsePower: Number(car.hp || car.horsePower || 0),
+        transmission: String(car.transmission ?? '').trim(),
+        wheelDrive: String(car.wheelDrive ?? car.driveType ?? '').trim(),
+        driveType: String(car.wheelDrive ?? car.driveType ?? '').trim(),
+        bodyType: String(car.bodyType ?? '').trim(),
+        baseLength: String(car.baseLength ?? '').trim(),
+        roofHeight: String(car.roofHeight ?? '').trim(),
+        ...(car.seatCount ? { seatCount: String(car.seatCount).trim() } : {}),
+        color: String(car.color ?? '').trim(),
+        fuelType: String(car.fuelType ?? '').trim(),
+        condition: String(car.condition ?? 'Vuruğu yoxdur, rənglənməyib').trim(),
+        vinCode: String(car.vinCode ?? '').trim(),
+        primaryImage: String(car.primaryImage || (Array.isArray(car.images) && car.images[0]) || ''),
+        images: Array.isArray(car.images) ? car.images : [],
+        description: String(car.description || ''),
+        features: Array.isArray(car.features) ? car.features : [],
+        statusBadges: Array.isArray(car.statusBadges) ? car.statusBadges : (Array.isArray(car.badges) ? car.badges : ['Vuruqsuz', 'Gömrük olunub', 'Zəmanətli']),
+        badges: Array.isArray(car.statusBadges) ? car.statusBadges : (Array.isArray(car.badges) ? car.badges : ['Vuruqsuz', 'Gömrük olunub', 'Zəmanətli']),
+        isFeatured: Boolean(car.isFeatured),
+        status: car.status === 'sold' ? 'sold' : 'active',
+        specs: (typeof car.specs === 'object' && car.specs !== null) ? car.specs : undefined
+      };
+    });
+  } catch (err) {
+    console.warn('Failed to sanitize cars for HTML injection:', err);
+    return null;
+  }
+}
+
+/**
+ * Injects initial cars data into HTML template as a safe script setting window.__INITIAL_CARS__.
+ */
+function injectInitialCarsIntoHtml(html: string): string {
+  try {
+    const cars = getSanitizedCarsForInjection();
+    if (!cars || cars.length === 0) {
+      return html;
+    }
+    const safeJson = serializeForScript(cars);
+    const scriptTag = `<script>window.__INITIAL_CARS__ = ${safeJson};</script>`;
+    if (html.includes('<div id="root">')) {
+      return html.replace('<div id="root">', `${scriptTag}\n    <div id="root">`);
+    } else if (html.includes('</head>')) {
+      return html.replace('</head>', `  ${scriptTag}\n  </head>`);
+    } else {
+      return `${scriptTag}\n${html}`;
+    }
+  } catch (e) {
+    console.warn('Could not inject initial cars into HTML:', e);
+    return html;
+  }
+}
+
+/**
  * Formats a raw Supabase cars table row into a standard TransitCar model.
  */
 function formatSupabaseCarRow(row: Record<string, any>): Record<string, unknown> {
@@ -1323,13 +1421,49 @@ async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa',
+      appType: 'custom',
     });
     app.use(vite.middlewares);
+    app.use('*', async (req, res, next) => {
+      if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/pics')) {
+        return next();
+      }
+      try {
+        const url = req.originalUrl;
+        const indexPath = path.resolve(process.cwd(), 'index.html');
+        if (!fs.existsSync(indexPath)) {
+          return next();
+        }
+        let template = fs.readFileSync(indexPath, 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        const html = injectInitialCarsIntoHtml(template);
+        res.status(200).set({
+          'Content-Type': 'text/html',
+          'Cache-Control': 'public, max-age=30, stale-while-revalidate=60'
+        }).send(html);
+      } catch (e) {
+        vite.ssrFixStacktrace(e as Error);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, { index: false }));
     app.get('*', (req, res) => {
+      try {
+        const indexPath = path.join(distPath, 'index.html');
+        if (fs.existsSync(indexPath)) {
+          const template = fs.readFileSync(indexPath, 'utf-8');
+          const html = injectInitialCarsIntoHtml(template);
+          res.status(200).set({
+            'Content-Type': 'text/html',
+            'Cache-Control': 'public, max-age=30, stale-while-revalidate=60'
+          }).send(html);
+          return;
+        }
+      } catch (e) {
+        console.warn('Could not inject cars into production index.html:', e);
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
@@ -1353,6 +1487,14 @@ async function startServer() {
     console.warn('\x1b[33m%s\x1b[0m', '   Supabase əlaqəsi deaktivdir. Server yerli disk-keş (data/cars.json) rejimində davam edir.');
   } else {
     console.log(`✅ Supabase konfiqurasiyası mühit dəyişənlərindən təyin edildi (${startNormUrl})`);
+  }
+
+  // Pre-warm disk cache in background from Supabase if configured
+  const bgSupabase = getServerSupabase();
+  if (bgSupabase) {
+    refreshDiskCacheFromSupabase(bgSupabase).catch(err => {
+      console.warn('Initial server background cache refresh failed:', err);
+    });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
