@@ -19,13 +19,13 @@ export const DetailSimilarCars: React.FC<DetailSimilarCarsProps> = ({
   if (!similarCars || similarCars.length === 0) return null;
 
   return (
-    <div className="border-t border-slate-200 pt-6 mt-4 pb-2">
+    <div className="w-full">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h3 className="text-base sm:text-lg font-bold text-black tracking-tight">
             Bənzər elanlar
           </h3>
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700 border border-slate-300/60">
             {similarCars.length}
           </span>
         </div>

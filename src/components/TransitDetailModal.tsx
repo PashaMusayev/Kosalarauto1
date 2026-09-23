@@ -526,47 +526,60 @@ const TransitDetailCard: React.FC<TransitDetailCardProps> = ({
         </div>
 
         {/* Məzmun Gövdəsi: Turbo.az strukturu */}
-        <div className="p-4 sm:p-5 md:p-6 pb-20 md:pb-6 space-y-4 sm:space-y-5 max-w-5xl mx-auto block w-full">
-          {/* 1. BAŞLIQ VƏ QİYMƏT (YALNIZ MOBİLDƏ GÖSTƏRİLİR) */}
-          <DetailMobileTitleBlock
-            safePrice={safePrice}
-            vehicleMainTitle={vehicleMainTitle}
-            safeMileage={safeMileage}
-          />
+        {(() => {
+          const hasSimilarCars = Boolean(similarCars && similarCars.length > 0);
+          return (
+            <>
+              <div className={`p-4 sm:p-5 md:p-6 ${hasSimilarCars ? 'pb-6 md:pb-8' : 'pb-24 md:pb-8'} space-y-4 sm:space-y-5 max-w-5xl mx-auto block w-full`}>
+                {/* 1. BAŞLIQ VƏ QİYMƏT (YALNIZ MOBİLDƏ GÖSTƏRİLİR) */}
+                <DetailMobileTitleBlock
+                  safePrice={safePrice}
+                  vehicleMainTitle={vehicleMainTitle}
+                  safeMileage={safeMileage}
+                />
 
-          {/* 2. XÜSUSİYYƏTLƏR CƏDVƏLİ (YALNIZ MOBİLDƏ GÖSTƏRİLİR - TURBO.AZ STİLİ) */}
-          <DetailMobileSpecs
-            safeLocation={safeLocation}
-            safeMake={safeMake}
-            safeModel={safeModel}
-            safeYear={safeYear}
-            safeBodyType={safeBodyType}
-            safeSeatCount={safeSeatCount}
-            safeColor={safeColor}
-            safeEngine={safeEngine}
-            safeHp={safeHp}
-            safeFuelType={safeFuelType}
-            safeMileage={safeMileage}
-            safeTransmission={safeTransmission}
-            safeWheelDrive={safeWheelDrive}
-            safeBaseLength={safeBaseLength}
-            safeCondition={safeCondition}
-          />
+                {/* 2. XÜSUSİYYƏTLƏR CƏDVƏLİ (YALNIZ MOBİLDƏ GÖSTƏRİLİR - TURBO.AZ STİLİ) */}
+                <DetailMobileSpecs
+                  safeLocation={safeLocation}
+                  safeMake={safeMake}
+                  safeModel={safeModel}
+                  safeYear={safeYear}
+                  safeBodyType={safeBodyType}
+                  safeSeatCount={safeSeatCount}
+                  safeColor={safeColor}
+                  safeEngine={safeEngine}
+                  safeHp={safeHp}
+                  safeFuelType={safeFuelType}
+                  safeMileage={safeMileage}
+                  safeTransmission={safeTransmission}
+                  safeWheelDrive={safeWheelDrive}
+                  safeBaseLength={safeBaseLength}
+                  safeCondition={safeCondition}
+                />
 
-          {/* 3. QEYD VƏ TƏSVİR + 4. TƏCHİZAT + AVTOSALON MƏLUMATI */}
-          <DetailFeaturesAndShowroom
-            description={car?.description}
-            activeFeaturesList={activeFeaturesList}
-          />
+                {/* 3. QEYD VƏ TƏSVİR + 4. TƏCHİZAT + AVTOSALON MƏLUMATI */}
+                <DetailFeaturesAndShowroom
+                  description={car?.description}
+                  activeFeaturesList={activeFeaturesList}
+                />
+              </div>
 
-          {/* 5. BƏNZƏR ELANLAR (TURBO.AZ STYLE SIMILAR ADS) */}
-          <DetailSimilarCars
-            similarCars={similarCars}
-            favorites={favorites}
-            onToggleFavorite={onToggleFavorite}
-            onSelectSimilarCar={onSelectSimilarCar}
-          />
-        </div>
+              {/* 5. BƏNZƏR ELANLAR (TURBO.AZ STİLİ TAM ENLİ AÇIQ BOZ ZOLAQLI BÖLMƏ) */}
+              {hasSimilarCars && (
+                <section className="w-full bg-slate-50 border-t border-slate-200">
+                  <div className="max-w-5xl mx-auto p-4 sm:p-5 md:p-6 pb-24 md:pb-8">
+                    <DetailSimilarCars
+                      similarCars={similarCars}
+                      favorites={favorites}
+                      onToggleFavorite={onToggleFavorite}
+                      onSelectSimilarCar={onSelectSimilarCar}
+                    />
+                  </div>
+                </section>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Floating Bottom Action Bar (Zəng et + WhatsApp) - Yalnız Mobil Rejimdə */}

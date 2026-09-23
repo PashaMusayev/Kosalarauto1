@@ -14,28 +14,24 @@ export const DetailShowroomInfo: React.FC<DetailShowroomInfoProps> = ({
   if (variant === 'card') {
     return (
       <div className={`space-y-2.5 ${className}`}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-sm font-bold text-slate-900 truncate">Kosalar Auto</span>
-            <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-          </div>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-sm font-bold text-slate-900 truncate">Kosalar Auto</span>
+          <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+        </div>
+
+        <div className="space-y-1.5 text-xs">
           <a
             href={SHOWROOM_MAP_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors shrink-0"
+            className="group flex items-start gap-1.5 text-slate-700 hover:text-blue-600 transition-colors"
+            title="Xəritədə baxın"
           >
-            <Map className="w-3.5 h-3.5" />
-            <span>Xəritədə bax</span>
-            <ArrowUpRight className="w-3 h-3" />
+            <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+            <span className="leading-snug underline decoration-slate-300 group-hover:decoration-blue-500 underline-offset-2">
+              {SHOWROOM_ADDRESS}
+            </span>
           </a>
-        </div>
-
-        <div className="space-y-1.5 text-xs">
-          <div className="flex items-start gap-1.5 text-slate-600">
-            <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-            <span className="leading-snug">{SHOWROOM_ADDRESS}</span>
-          </div>
           <div className="flex items-center gap-1.5 text-slate-500">
             <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <span>{WORKING_HOURS}</span>
