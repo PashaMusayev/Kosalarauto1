@@ -52,7 +52,7 @@ export const DetailDesktopSidebar: React.FC<DetailDesktopSidebarProps> = ({
     : '';
 
   return (
-    <div className="hidden md:flex md:w-[42%] lg:w-[40%] flex-col justify-between p-6 lg:p-7 bg-white border-l border-slate-200">
+    <div className="hidden md:flex md:w-[42%] lg:w-[40%] flex-col p-6 lg:p-7 bg-white border-l border-slate-200">
       {/* Yuxarı Məlumatlar */}
       <div className="space-y-4">
         {/* 1. Qiymət */}

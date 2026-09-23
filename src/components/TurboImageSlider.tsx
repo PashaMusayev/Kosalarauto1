@@ -915,6 +915,20 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
               transform: 'translateX(-100%)',
             }}
           >
+            {!isLightbox && (
+              <div className="hidden md:block absolute inset-0 overflow-hidden pointer-events-none select-none z-0" aria-hidden="true">
+                <img
+                  src={getValidImageUrl(imagesList[totalImages - 1])}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover blur-2xl scale-110 brightness-50"
+                />
+                <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+              </div>
+            )}
             <img
               src={getValidImageUrl(imagesList[totalImages - 1])}
               alt={`${safeTitle} - last clone`}
@@ -924,7 +938,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
               onError={(e) => {
                 handleImageLoadError(e.currentTarget);
               }}
-              className={`select-none pointer-events-none block mx-auto drop-shadow-md ${
+              className={`select-none pointer-events-none block mx-auto drop-shadow-md relative z-10 ${
                 isLightbox
                   ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
                   : 'w-full h-full object-cover md:object-contain'
@@ -940,6 +954,12 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
 
         {imagesList.map((imgSrc, index) => {
           const isActiveSlide = index === activeImageIndex;
+          const isNearActive =
+            Math.abs(index - activeImageIndex) <= 1 ||
+            (totalImages > 1 && (
+              (activeImageIndex === 0 && index === totalImages - 1) ||
+              (activeImageIndex === totalImages - 1 && index === 0)
+            ));
 
           return (
             <div
@@ -948,15 +968,31 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
               className="w-full h-full shrink-0 flex items-center justify-center overflow-hidden relative bg-black select-none"
               style={{ width: containerWidth > 0 ? `${containerWidth}px` : '100%' }}
             >
+              {/* Turbo.az Desktop Blurred-Background Fill for non-lightbox slides */}
+              {!isLightbox && isNearActive && (
+                <div className="hidden md:block absolute inset-0 overflow-hidden pointer-events-none select-none z-0" aria-hidden="true">
+                  <img
+                    src={getValidImageUrl(imgSrc)}
+                    alt=""
+                    aria-hidden="true"
+                    loading="lazy"
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover blur-2xl scale-110 brightness-50"
+                  />
+                  <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+                </div>
+              )}
+
               <img
                 src={getValidImageUrl(imgSrc)}
                 alt={`${safeTitle} - ${index + 1}`}
-                loading={Math.abs(index - activeImageIndex) <= 1 ? 'eager' : 'lazy'}
+                loading={isNearActive ? 'eager' : 'lazy'}
                 decoding="async"
                 onError={(e) => {
                   handleImageLoadError(e.currentTarget);
                 }}
-                className={`select-none pointer-events-none block mx-auto drop-shadow-md ${
+                className={`select-none pointer-events-none block mx-auto drop-shadow-md relative z-10 ${
                   isLightbox
                     ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
                     : 'w-full h-full object-cover md:object-contain'
@@ -985,6 +1021,20 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
             className="w-full h-full shrink-0 flex items-center justify-center overflow-hidden relative bg-black select-none pointer-events-none"
             style={{ width: containerWidth > 0 ? `${containerWidth}px` : '100%' }}
           >
+            {!isLightbox && (
+              <div className="hidden md:block absolute inset-0 overflow-hidden pointer-events-none select-none z-0" aria-hidden="true">
+                <img
+                  src={getValidImageUrl(imagesList[0])}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover blur-2xl scale-110 brightness-50"
+                />
+                <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+              </div>
+            )}
             <img
               src={getValidImageUrl(imagesList[0])}
               alt={`${safeTitle} - first clone`}
@@ -994,7 +1044,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
               onError={(e) => {
                 handleImageLoadError(e.currentTarget);
               }}
-              className={`select-none pointer-events-none block mx-auto drop-shadow-md ${
+              className={`select-none pointer-events-none block mx-auto drop-shadow-md relative z-10 ${
                 isLightbox
                   ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
                   : 'w-full h-full object-cover md:object-contain'

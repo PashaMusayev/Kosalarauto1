@@ -467,9 +467,9 @@ const TransitDetailCard: React.FC<TransitDetailCardProps> = ({
       {/* Modal Scrollable Content */}
       <div ref={scrollContainerRef} className="overflow-y-auto flex-1 min-h-0 bg-white block w-full overscroll-contain">
         {/* RESPONSIVE HERO SECTION */}
-        <div className="flex flex-col md:flex-row w-full bg-white border-b border-slate-200">
-          {/* Sol Sütun (Şəkil Sahəsi - Desktopda 60% enində, h-full, min-h-[520px], tam qara arxafon) */}
-          <div className="w-full md:w-[58%] lg:w-[60%] shrink-0 bg-black flex items-center justify-center md:items-stretch overflow-hidden relative md:min-h-[520px]">
+        <div className="flex flex-col md:flex-row md:items-start w-full bg-white border-b border-slate-200">
+          {/* Sol Sütun (Şəkil Sahəsi - Desktopda 60% enində, sabit 4:3 nisbətində, tam qara arxafon) */}
+          <div className="w-full md:w-[58%] lg:w-[60%] shrink-0 bg-black flex items-center justify-center overflow-hidden relative aspect-[4/3] md:aspect-[4/3]">
             <TurboImageSlider
               key={`modal-slider-${car?.id}`}
               images={imagesList}
@@ -487,7 +487,7 @@ const TransitDetailCard: React.FC<TransitDetailCardProps> = ({
               }}
               onOpenPhotoGrid={openPhotoGrid}
               disabledKeyNav={isLightboxOpen || isPhotoGridOpen}
-              className="w-full aspect-[4/3] md:aspect-auto md:h-full md:self-stretch flex items-center justify-center bg-black"
+              className="w-full h-full aspect-[4/3] flex items-center justify-center bg-black"
             />
           </div>
 
