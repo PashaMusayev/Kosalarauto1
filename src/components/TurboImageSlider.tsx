@@ -1,7 +1,218 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react';
-import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl, handleImageLoadError } from '../utils/imageFallback';
+import { 
+  DEFAULT_VEHICLE_PLACEHOLDER, 
+  getValidImageUrl, 
+  handleImageLoadError,
+  getThumbnailUrl,
+  isThumbnailFailed,
+  markThumbnailFailed
+} from '../utils/imageFallback';
 import { prefetchCarouselWindow } from '../utils/imagePreloader';
+
+/**
+ * Global memory cache of full-size image URLs that have already loaded
+ * in the current browser session. Enables instantaneous, zero-flicker
+ * and zero-fade display when switching between slides or revisiting images.
+ */
+const loadedFullImagesCache = new Set<string>();
+
+interface SlideImageProps {
+  src: string;
+  alt: string;
+  isActiveSlide: boolean;
+  isNearActive: boolean;
+  isLightbox: boolean;
+  isZoomed: boolean;
+  isDragging: boolean;
+  scale: number;
+  pan: { x: number; y: number };
+}
+
+/**
+ * Three-layer progressive slide image component:
+ * 1. Blurred background using thumbnail URL (desktop non-lightbox).
+ * 2. Instant thumbnail placeholder layer (w-full h-full object-contain / object-cover).
+ * 3. Full-size image on top with ~200ms smooth fade-in (instant for cached images).
+ */
+const SlideImage: React.FC<SlideImageProps> = ({
+  src,
+  alt,
+  isActiveSlide,
+  isNearActive,
+  isLightbox,
+  isZoomed,
+  isDragging,
+  scale,
+  pan,
+}) => {
+  const validFullUrl = getValidImageUrl(src);
+  const candidateThumb = getThumbnailUrl(validFullUrl);
+  const hasCandidateThumb = Boolean(candidateThumb) && candidateThumb !== validFullUrl && !isThumbnailFailed(candidateThumb);
+
+  const [isFullLoaded, setIsFullLoaded] = useState(() => loadedFullImagesCache.has(validFullUrl));
+  const [isCached, setIsCached] = useState(() => loadedFullImagesCache.has(validFullUrl));
+  const [placeholderVisible, setPlaceholderVisible] = useState(() => !loadedFullImagesCache.has(validFullUrl));
+  const [thumbFailed, setThumbFailed] = useState(() => isThumbnailFailed(candidateThumb));
+
+  const hidePlaceholderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fullImgRef = useRef<HTMLImageElement | null>(null);
+
+  // Sync state if validFullUrl or candidateThumb changes
+  useEffect(() => {
+    if (loadedFullImagesCache.has(validFullUrl)) {
+      setIsFullLoaded(true);
+      setIsCached(true);
+      setPlaceholderVisible(false);
+    } else {
+      const isAlreadyComplete = Boolean(
+        fullImgRef.current &&
+        fullImgRef.current.complete &&
+        fullImgRef.current.naturalWidth > 0
+      );
+      if (isAlreadyComplete) {
+        loadedFullImagesCache.add(validFullUrl);
+        setIsFullLoaded(true);
+        setIsCached(true);
+        setPlaceholderVisible(false);
+      } else {
+        setIsFullLoaded(false);
+        setIsCached(false);
+        setPlaceholderVisible(true);
+      }
+    }
+    setThumbFailed(isThumbnailFailed(candidateThumb));
+  }, [validFullUrl, candidateThumb]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (hidePlaceholderTimerRef.current) {
+        clearTimeout(hidePlaceholderTimerRef.current);
+        hidePlaceholderTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const checkImgRef = useCallback((img: HTMLImageElement | null) => {
+    fullImgRef.current = img;
+    if (!img) return;
+    if (loadedFullImagesCache.has(validFullUrl) || (img.complete && img.naturalWidth > 0)) {
+      loadedFullImagesCache.add(validFullUrl);
+      setIsFullLoaded(true);
+      setIsCached(true);
+      setPlaceholderVisible(false);
+    }
+  }, [validFullUrl]);
+
+  const handleFullLoad = useCallback(() => {
+    loadedFullImagesCache.add(validFullUrl);
+    setIsFullLoaded(true);
+    // Smoothly fade in over 200ms, then hide placeholder
+    if (hidePlaceholderTimerRef.current) {
+      clearTimeout(hidePlaceholderTimerRef.current);
+    }
+    hidePlaceholderTimerRef.current = setTimeout(() => {
+      setPlaceholderVisible(false);
+    }, 220);
+  }, [validFullUrl]);
+
+  const showPlaceholder = placeholderVisible && hasCandidateThumb && !thumbFailed;
+  const blurredBgSrc = hasCandidateThumb && !thumbFailed ? candidateThumb : validFullUrl;
+
+  const imageTransform = isActiveSlide && isZoomed
+    ? `translate3d(${pan.x}px, ${pan.y}px, 0px) scale(${scale})`
+    : 'scale(1)';
+
+  // Phase 53: lightbox and slider both use w-full h-full object-contain / object-cover
+  // inside the container box so the thumbnail and full-size image occupy the exact same rectangle.
+  const sizingClasses = isLightbox
+    ? 'w-full h-full object-contain p-2 sm:p-4'
+    : 'w-full h-full object-cover md:object-contain';
+
+  return (
+    <>
+      {/* Layer 1: Turbo.az Desktop Blurred-Background Fill for non-lightbox slides */}
+      {!isLightbox && isNearActive && (
+        <div className="hidden md:block absolute inset-0 overflow-hidden pointer-events-none select-none z-0" aria-hidden="true">
+          <img
+            src={blurredBgSrc}
+            alt=""
+            aria-hidden="true"
+            loading={isNearActive ? 'eager' : 'lazy'}
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              if (blurredBgSrc !== validFullUrl) {
+                markThumbnailFailed(blurredBgSrc);
+                e.currentTarget.src = validFullUrl;
+              }
+            }}
+            className="w-full h-full object-cover blur-2xl scale-110 brightness-50"
+          />
+          <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+        </div>
+      )}
+
+      {/* Layer 2: Instant Thumbnail Placeholder Layer (hidden once full image loads) */}
+      {showPlaceholder && (
+        <img
+          src={candidateThumb}
+          alt=""
+          aria-hidden="true"
+          loading={isNearActive ? 'eager' : 'lazy'}
+          fetchPriority={isActiveSlide ? 'high' : 'low'}
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => {
+            markThumbnailFailed(candidateThumb);
+            setThumbFailed(true);
+          }}
+          className={`select-none pointer-events-none block mx-auto drop-shadow-md absolute inset-0 z-10 ${sizingClasses}`}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectPosition: 'center',
+            transform: imageTransform,
+            transition: isDragging ? 'none' : 'transform 300ms ease',
+            transformOrigin: 'center center',
+            willChange: 'transform',
+          }}
+        />
+      )}
+
+      {/* Layer 3: Full-Size Image Layer with smooth fade-in */}
+      <img
+        ref={checkImgRef}
+        src={validFullUrl}
+        alt={alt}
+        loading={isNearActive ? 'eager' : 'lazy'}
+        fetchPriority={isActiveSlide ? 'high' : 'low'}
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onLoad={handleFullLoad}
+        onError={(e) => {
+          handleImageLoadError(e.currentTarget);
+        }}
+        className={`select-none pointer-events-none block mx-auto drop-shadow-md relative z-10 ${sizingClasses}`}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectPosition: 'center',
+          opacity: isFullLoaded ? 1 : 0,
+          transition: isDragging
+            ? 'none'
+            : isCached
+            ? 'transform 300ms ease'
+            : 'opacity 200ms ease-out, transform 300ms ease',
+          transform: imageTransform,
+          transformOrigin: 'center center',
+          willChange: 'transform',
+        }}
+      />
+    </>
+  );
+};
 
 interface TurboImageSliderProps {
   images: string[];
@@ -915,39 +1126,16 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
               transform: 'translateX(-100%)',
             }}
           >
-            {!isLightbox && (
-              <div className="hidden md:block absolute inset-0 overflow-hidden pointer-events-none select-none z-0" aria-hidden="true">
-                <img
-                  src={getValidImageUrl(imagesList[totalImages - 1])}
-                  alt=""
-                  aria-hidden="true"
-                  loading="lazy"
-                  decoding="async"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover blur-2xl scale-110 brightness-50"
-                />
-                <div className="absolute inset-0 bg-black/40 pointer-events-none" />
-              </div>
-            )}
-            <img
-              src={getValidImageUrl(imagesList[totalImages - 1])}
+            <SlideImage
+              src={imagesList[totalImages - 1]}
               alt={`${safeTitle} - last clone`}
-              loading="eager"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                handleImageLoadError(e.currentTarget);
-              }}
-              className={`select-none pointer-events-none block mx-auto drop-shadow-md relative z-10 ${
-                isLightbox
-                  ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
-                  : 'w-full h-full object-cover md:object-contain'
-              }`}
-              style={{
-                width: isLightbox ? 'auto' : '100%',
-                height: isLightbox ? 'auto' : '100%',
-                objectPosition: 'center',
-              }}
+              isActiveSlide={false}
+              isNearActive={true}
+              isLightbox={isLightbox}
+              isZoomed={false}
+              isDragging={isDragging}
+              scale={1}
+              pan={{ x: 0, y: 0 }}
             />
           </div>
         )}
@@ -968,46 +1156,16 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
               className="w-full h-full shrink-0 flex items-center justify-center overflow-hidden relative bg-black select-none"
               style={{ width: containerWidth > 0 ? `${containerWidth}px` : '100%' }}
             >
-              {/* Turbo.az Desktop Blurred-Background Fill for non-lightbox slides */}
-              {!isLightbox && isNearActive && (
-                <div className="hidden md:block absolute inset-0 overflow-hidden pointer-events-none select-none z-0" aria-hidden="true">
-                  <img
-                    src={getValidImageUrl(imgSrc)}
-                    alt=""
-                    aria-hidden="true"
-                    loading="lazy"
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover blur-2xl scale-110 brightness-50"
-                  />
-                  <div className="absolute inset-0 bg-black/40 pointer-events-none" />
-                </div>
-              )}
-
-              <img
-                src={getValidImageUrl(imgSrc)}
+              <SlideImage
+                src={imgSrc}
                 alt={`${safeTitle} - ${index + 1}`}
-                loading={isNearActive ? 'eager' : 'lazy'}
-                decoding="async"
-                onError={(e) => {
-                  handleImageLoadError(e.currentTarget);
-                }}
-                className={`select-none pointer-events-none block mx-auto drop-shadow-md relative z-10 ${
-                  isLightbox
-                    ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
-                    : 'w-full h-full object-cover md:object-contain'
-                }`}
-                style={{
-                  width: isLightbox ? 'auto' : '100%',
-                  height: isLightbox ? 'auto' : '100%',
-                  objectPosition: 'center',
-                  transform: isActiveSlide && isZoomed
-                    ? `translate3d(${pan.x}px, ${pan.y}px, 0px) scale(${scale})`
-                    : 'scale(1)',
-                  transition: isDragging ? 'none' : 'transform 300ms ease',
-                  transformOrigin: 'center center',
-                  willChange: 'transform',
-                }}
+                isActiveSlide={isActiveSlide}
+                isNearActive={isNearActive}
+                isLightbox={isLightbox}
+                isZoomed={isZoomed}
+                isDragging={isDragging}
+                scale={scale}
+                pan={pan}
               />
             </div>
           );
@@ -1021,39 +1179,16 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
             className="w-full h-full shrink-0 flex items-center justify-center overflow-hidden relative bg-black select-none pointer-events-none"
             style={{ width: containerWidth > 0 ? `${containerWidth}px` : '100%' }}
           >
-            {!isLightbox && (
-              <div className="hidden md:block absolute inset-0 overflow-hidden pointer-events-none select-none z-0" aria-hidden="true">
-                <img
-                  src={getValidImageUrl(imagesList[0])}
-                  alt=""
-                  aria-hidden="true"
-                  loading="lazy"
-                  decoding="async"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover blur-2xl scale-110 brightness-50"
-                />
-                <div className="absolute inset-0 bg-black/40 pointer-events-none" />
-              </div>
-            )}
-            <img
-              src={getValidImageUrl(imagesList[0])}
+            <SlideImage
+              src={imagesList[0]}
               alt={`${safeTitle} - first clone`}
-              loading="eager"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                handleImageLoadError(e.currentTarget);
-              }}
-              className={`select-none pointer-events-none block mx-auto drop-shadow-md relative z-10 ${
-                isLightbox
-                  ? 'max-w-full max-h-full object-contain p-2 sm:p-4'
-                  : 'w-full h-full object-cover md:object-contain'
-              }`}
-              style={{
-                width: isLightbox ? 'auto' : '100%',
-                height: isLightbox ? 'auto' : '100%',
-                objectPosition: 'center',
-              }}
+              isActiveSlide={false}
+              isNearActive={true}
+              isLightbox={isLightbox}
+              isZoomed={false}
+              isDragging={isDragging}
+              scale={1}
+              pan={{ x: 0, y: 0 }}
             />
           </div>
         )}

@@ -3,7 +3,7 @@ import { motion, AnimatePresence, Variants } from 'motion/react';
 import { X } from 'lucide-react';
 import { TransitCar } from '../types';
 import { WHATSAPP_NUMBER } from '../data/transits';
-import { DEFAULT_VEHICLE_PLACEHOLDER } from '../utils/imageFallback';
+import { DEFAULT_VEHICLE_PLACEHOLDER, getThumbnailUrl, isThumbnailFailed } from '../utils/imageFallback';
 import { useBodyScrollLock } from '../utils/scrollLock';
 import { TurboImageSlider } from './TurboImageSlider';
 import { prefetchImages, prefetchCarouselWindow } from '../utils/imagePreloader';
@@ -262,9 +262,17 @@ const TransitDetailCard: React.FC<TransitDetailCardProps> = ({
     return list.length > 0 ? list : [DEFAULT_VEHICLE_PLACEHOLDER];
   }, [car]);
 
-  // Arxa fonda şəkil preloading: İlk 4 şəkli dərhal əvvəlcədən yüklə
+  // Progressive Preloading: Detail pəncərəsi açılanda və ya maşın dəyişəndə
+  // bütün şəkillərin kiçik miniatürlərini (thumbnails ~20-50KB) dərhal arxa fonda yüklə
   useEffect(() => {
     if (imagesList && imagesList.length > 0) {
+      // 1. Dərhal maşının BÜTÜN şəkillərinin miniatürlərini yüklə (failed olanları burax)
+      const thumbsToPrefetch = imagesList
+        .map((img) => getThumbnailUrl(img))
+        .filter((thumb) => Boolean(thumb) && !isThumbnailFailed(thumb));
+      prefetchImages(thumbsToPrefetch);
+
+      // 2. Mövcud tam ölçülü prefetch pəncərəsini qoru (ilk 4 şəkil)
       prefetchImages(imagesList.slice(0, 4));
     }
   }, [imagesList]);
