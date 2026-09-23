@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence, Variants } from 'motion/react';
+import { X } from 'lucide-react';
 import { TransitCar } from '../types';
 import { WHATSAPP_NUMBER } from '../data/transits';
 import { DEFAULT_VEHICLE_PLACEHOLDER } from '../utils/imageFallback';
@@ -30,6 +31,8 @@ export { formatBrandDisplayName, formatModelDisplayName };
 interface TransitDetailModalProps {
   car: TransitCar | null;
   onClose: () => void;
+  onBack?: () => void;
+  direction?: 'forward' | 'back';
   isFavorite?: boolean;
   onToggleFavorite?: (carId: string) => void;
   allCars?: TransitCar[];
@@ -40,6 +43,8 @@ interface TransitDetailModalProps {
 interface TransitDetailModalContentProps {
   car: TransitCar;
   onClose: () => void;
+  onBack?: () => void;
+  direction?: 'forward' | 'back';
   isFavorite?: boolean;
   onToggleFavorite?: (carId: string) => void;
   allCars?: TransitCar[];
@@ -119,13 +124,13 @@ const desktopSlideVariants: Variants = {
   }
 };
 
-// Mobile car switch variants (similar car slide in from right over previous one)
+// Mobile car switch variants (direction-aware)
 const mobileCardSwitchVariants: Variants = {
-  initial: { 
-    x: '100%',
-    zIndex: 2,
-    boxShadow: '-8px 0 24px rgba(0, 0, 0, 0.3)'
-  },
+  initial: (direction: 'forward' | 'back') => ({ 
+    x: direction === 'back' ? '-20%' : '100%',
+    zIndex: direction === 'back' ? 1 : 2,
+    boxShadow: direction === 'back' ? 'none' : '-8px 0 24px rgba(0, 0, 0, 0.3)'
+  }),
   animate: { 
     x: 0,
     zIndex: 2,
@@ -135,26 +140,29 @@ const mobileCardSwitchVariants: Variants = {
       ease: 'easeOut' 
     } 
   },
-  exit: { 
-    x: '-20%',
-    zIndex: 1,
+  exit: (direction: 'forward' | 'back') => ({ 
+    x: direction === 'back' ? '100%' : '-20%',
+    zIndex: direction === 'back' ? 2 : 1,
+    boxShadow: direction === 'back' ? '-8px 0 24px rgba(0, 0, 0, 0.3)' : 'none',
     pointerEvents: 'none',
     transition: { 
       duration: 0.35, 
       ease: 'easeIn' 
     } 
-  }
+  })
 };
 
-// Desktop car switch variants (similar car slide up from bottom over previous one)
+// Desktop car switch variants (direction-aware)
 const desktopCardSwitchVariants: Variants = {
-  initial: { 
-    y: '100%',
-    zIndex: 2,
-    boxShadow: '0 -8px 24px rgba(0, 0, 0, 0.3)'
-  },
+  initial: (direction: 'forward' | 'back') => ({ 
+    y: direction === 'back' ? 0 : '100%',
+    opacity: direction === 'back' ? 0.3 : 1,
+    zIndex: direction === 'back' ? 1 : 2,
+    boxShadow: direction === 'back' ? 'none' : '0 -8px 24px rgba(0, 0, 0, 0.3)'
+  }),
   animate: { 
     y: 0,
+    opacity: 1,
     zIndex: 2,
     boxShadow: 'none',
     transition: { 
@@ -162,16 +170,17 @@ const desktopCardSwitchVariants: Variants = {
       ease: 'easeOut' 
     } 
   },
-  exit: { 
-    y: 0,
-    opacity: 0.3,
-    zIndex: 1,
+  exit: (direction: 'forward' | 'back') => ({ 
+    y: direction === 'back' ? '100%' : 0,
+    opacity: direction === 'back' ? 1 : 0.3,
+    zIndex: direction === 'back' ? 2 : 1,
+    boxShadow: direction === 'back' ? '0 -8px 24px rgba(0, 0, 0, 0.3)' : 'none',
     pointerEvents: 'none',
     transition: { 
       duration: 0.35, 
       ease: 'easeIn' 
     } 
-  }
+  })
 };
 
 // ----------------------------------------------------------------------
@@ -181,6 +190,8 @@ interface TransitDetailCardProps {
   car: TransitCar;
   isMobile: boolean;
   onClose: () => void;
+  onBack?: () => void;
+  direction?: 'forward' | 'back';
   isFavorite: boolean;
   onToggleFavorite?: (carId: string) => void;
   allCars: TransitCar[];
@@ -198,6 +209,8 @@ const TransitDetailCard: React.FC<TransitDetailCardProps> = ({
   car,
   isMobile,
   onClose,
+  onBack,
+  direction = 'forward',
   isFavorite,
   onToggleFavorite,
   allCars,
@@ -415,23 +428,41 @@ const TransitDetailCard: React.FC<TransitDetailCardProps> = ({
   return (
     <motion.div
       className="absolute inset-0 w-full h-full bg-white flex flex-col overflow-hidden overscroll-contain"
+      custom={direction}
       variants={isMobile ? mobileCardSwitchVariants : desktopCardSwitchVariants}
       initial="initial"
       animate="animate"
       exit="exit"
     >
-      {/* Top Sticky Header */}
-      <DetailMobileHeader
-        onClose={onClose}
-        onShare={handleShare}
-        copied={copied}
-        isFavorite={isFavorite}
-        onToggleFavorite={() => {
-          if (car?.id && onToggleFavorite) {
-            onToggleFavorite(car.id);
-          }
-        }}
-      />
+      {/* Top Sticky Header with Desktop Close Button */}
+      <div className="relative w-full shrink-0 [&>div:first-child]:md:pr-16">
+        <DetailMobileHeader
+          onClose={onBack || onClose}
+          onShare={handleShare}
+          copied={copied}
+          isFavorite={isFavorite}
+          onToggleFavorite={() => {
+            if (car?.id && onToggleFavorite) {
+              onToggleFavorite(car.id);
+            }
+          }}
+        />
+
+        {/* Desktop Close (X) Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onClose();
+          }}
+          className="hidden md:flex absolute top-3.5 right-4 z-40 w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 items-center justify-center transition-all active:scale-95 shadow-xs cursor-pointer"
+          title="Bağla (Esc)"
+          aria-label="Bağla"
+        >
+          <X className="w-5 h-5 text-slate-700" />
+        </button>
+      </div>
 
       {/* Modal Scrollable Content */}
       <div ref={scrollContainerRef} className="overflow-y-auto flex-1 min-h-0 bg-white block w-full overscroll-contain">
@@ -537,6 +568,8 @@ const TransitDetailCard: React.FC<TransitDetailCardProps> = ({
 const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
   car,
   onClose,
+  onBack,
+  direction = 'forward',
   isFavorite = false,
   onToggleFavorite,
   allCars = [],
@@ -847,12 +880,14 @@ const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} custom={direction}>
           <TransitDetailCard
             key={car.id}
             car={car}
             isMobile={isMobile}
             onClose={onClose}
+            onBack={onBack}
+            direction={direction}
             isFavorite={isFavorite}
             onToggleFavorite={onToggleFavorite}
             allCars={allCars}
@@ -909,6 +944,8 @@ const TransitDetailModalContent: React.FC<TransitDetailModalContentProps> = ({
 export const TransitDetailModal: React.FC<TransitDetailModalProps> = ({
   car,
   onClose,
+  onBack,
+  direction = 'forward',
   isFavorite = false,
   onToggleFavorite,
   allCars = [],
@@ -923,6 +960,8 @@ export const TransitDetailModal: React.FC<TransitDetailModalProps> = ({
             key="transit-detail-modal-root"
             car={car} 
             onClose={onClose} 
+            onBack={onBack}
+            direction={direction}
             isFavorite={isFavorite} 
             onToggleFavorite={onToggleFavorite}
             allCars={allCars}

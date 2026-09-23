@@ -63,6 +63,7 @@ export default function App() {
     }
     return '/';
   });
+  const [navigationDirection, setNavigationDirection] = useState<'forward' | 'back'>('forward');
 
   const [transits, setTransits] = useState<TransitCar[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -263,6 +264,7 @@ export default function App() {
         if (carId) {
           const list = transitsRef.current.length > 0 ? transitsRef.current : transits;
           const matchedCar = list.find(c => c.id.toLowerCase() === carId.toLowerCase());
+          setNavigationDirection('back');
           setSelectedCar(matchedCar || null);
         } else {
           setSelectedCar(null);
@@ -347,37 +349,45 @@ export default function App() {
   // Sync modal state with URL - opening from catalog or favorites drawer
   const handleOpenDetail = useCallback((car: TransitCar) => {
     detailOpenedFromCatalogRef.current = true;
+    setNavigationDirection('forward');
     setSelectedCar(car);
     try {
       const url = new URL(window.location.href);
       url.searchParams.set('car', car.id);
       url.searchParams.delete('overlay');
       url.searchParams.delete('photo');
-      window.history.pushState({ carModal: true }, '', url.toString());
+      window.history.pushState({ carModal: true, carDepth: 1 }, '', url.toString());
     } catch (e) {}
   }, []);
 
-  // Switch to a similar car from within the open Detail Modal (REPLACES history state to prevent stack pollution)
+  // Switch to a similar car from within the open Detail Modal (PUSHES history state with incremented carDepth)
   const handleSelectSimilarCar = useCallback((car: TransitCar) => {
+    detailOpenedFromCatalogRef.current = true;
+    setNavigationDirection('forward');
     setSelectedCar(car);
     try {
+      const currentDepth = (window.history.state && typeof window.history.state.carDepth === 'number')
+        ? window.history.state.carDepth
+        : 1;
+      const nextDepth = currentDepth + 1;
       const url = new URL(window.location.href);
       url.searchParams.set('car', car.id);
       url.searchParams.delete('overlay');
       url.searchParams.delete('photo');
-      // Use replaceState so that navigating through similar cars does NOT push new entries into the browser history stack
-      window.history.replaceState({ carModal: detailOpenedFromCatalogRef.current }, '', url.toString());
+      window.history.pushState({ carModal: true, carDepth: nextDepth }, '', url.toString());
     } catch (e) {}
   }, []);
 
+  // Close actions (desktop X, clicking backdrop, Escape): close detail view entirely and unwind car stack in one action
   const handleCloseDetail = useCallback(() => {
     try {
-      // Pop the history entry pushed when detail was opened, which dispatches popstate
-      if (detailOpenedFromCatalogRef.current || window.history.state?.carModal || window.history.length > 1) {
+      const state = window.history.state;
+      if (state?.carModal && detailOpenedFromCatalogRef.current) {
         detailOpenedFromCatalogRef.current = false;
-        window.history.back();
+        const depth = (typeof state.carDepth === 'number' && state.carDepth > 0) ? state.carDepth : 1;
+        window.history.go(-depth);
       } else {
-        // Fallback for direct link in a fresh tab with no prior history
+        // Fallback for direct link in a fresh tab with no prior carModal history pushed by this site
         detailOpenedFromCatalogRef.current = false;
         setSelectedCar(null);
         const url = new URL(window.location.href);
@@ -388,7 +398,28 @@ export default function App() {
       }
     } catch (e) {
       detailOpenedFromCatalogRef.current = false;
-      window.history.back();
+      setSelectedCar(null);
+    }
+  }, []);
+
+  // Back actions (mobile header back arrow): go back exactly ONE step in history
+  const handleBackDetail = useCallback(() => {
+    try {
+      const state = window.history.state;
+      if (state?.carModal && detailOpenedFromCatalogRef.current) {
+        window.history.back();
+      } else {
+        // Fallback for direct link in a fresh tab
+        detailOpenedFromCatalogRef.current = false;
+        setSelectedCar(null);
+        const url = new URL(window.location.href);
+        url.searchParams.delete('car');
+        url.searchParams.delete('overlay');
+        url.searchParams.delete('photo');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch (e) {
+      setSelectedCar(null);
     }
   }, []);
 
@@ -721,6 +752,8 @@ export default function App() {
       <TransitDetailModal
         car={selectedCar}
         onClose={handleCloseDetail}
+        onBack={handleBackDetail}
+        direction={navigationDirection}
         isFavorite={selectedCar ? favorites.includes(selectedCar.id) : false}
         onToggleFavorite={handleToggleFavorite}
         allCars={transits}
