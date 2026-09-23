@@ -1094,6 +1094,17 @@ async function startServer() {
             paths.push(p);
             if (p.startsWith('cars/')) paths.push(p.replace(/^cars\//, ''));
             else paths.push(`cars/${p}`);
+
+            // Also clean up associated thumbnail
+            if (!p.includes('__thumb.')) {
+              const dot = p.lastIndexOf('.');
+              if (dot !== -1) {
+                const thumbP = `${p.substring(0, dot)}__thumb.webp`;
+                paths.push(thumbP);
+                if (thumbP.startsWith('cars/')) paths.push(thumbP.replace(/^cars\//, ''));
+                else paths.push(`cars/${thumbP}`);
+              }
+            }
           }
         }
 
@@ -1148,7 +1159,14 @@ async function startServer() {
         if (item.includes('/pics/uploads/')) {
           const localFileName = item.split('/pics/uploads/')[1]?.split('?')[0]?.split('#')[0];
           if (localFileName) {
-            localFiles.push(localFileName.replace(/[^a-zA-Z0-9._-]/g, ''));
+            const cleanLocal = localFileName.replace(/[^a-zA-Z0-9._-]/g, '');
+            localFiles.push(cleanLocal);
+            if (!cleanLocal.includes('__thumb.')) {
+              const dot = cleanLocal.lastIndexOf('.');
+              if (dot !== -1) {
+                localFiles.push(`${cleanLocal.substring(0, dot)}__thumb.webp`);
+              }
+            }
           }
         }
 
@@ -1159,10 +1177,30 @@ async function startServer() {
           paths.push(p);
           if (p.startsWith('cars/')) paths.push(p.replace(/^cars\//, ''));
           else paths.push(`cars/${p}`);
+
+          if (!p.includes('__thumb.')) {
+            const dot = p.lastIndexOf('.');
+            if (dot !== -1) {
+              const thumbP = `${p.substring(0, dot)}__thumb.webp`;
+              paths.push(thumbP);
+              if (thumbP.startsWith('cars/')) paths.push(thumbP.replace(/^cars\//, ''));
+              else paths.push(`cars/${thumbP}`);
+            }
+          }
         } else if (!item.startsWith('http') && !item.startsWith('/')) {
           paths.push(item);
           if (item.startsWith('cars/')) paths.push(item.replace(/^cars\//, ''));
           else paths.push(`cars/${item}`);
+
+          if (!item.includes('__thumb.')) {
+            const dot = item.lastIndexOf('.');
+            if (dot !== -1) {
+              const thumbItem = `${item.substring(0, dot)}__thumb.webp`;
+              paths.push(thumbItem);
+              if (thumbItem.startsWith('cars/')) paths.push(thumbItem.replace(/^cars\//, ''));
+              else paths.push(`cars/${thumbItem}`);
+            }
+          }
         }
       }
 
@@ -1198,7 +1236,7 @@ async function startServer() {
   app.post('/api/upload-image', express.json({ limit: '50mb' }), requireAdminAuth, async (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
-      const { dataUrl, filename } = req.body;
+      const { dataUrl, filename, storagePath: clientStoragePath, exactFilename } = req.body;
       if (!dataUrl) {
         res.status(400).json({ error: 'dataUrl tələb olunur' });
         return;
@@ -1233,8 +1271,17 @@ async function startServer() {
         return;
       }
 
-      const cleanName = filename ? filename.replace(/[^a-zA-Z0-9.-]/g, '_') : `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${extension}`;
-      const storagePath = `cars/${Date.now()}_${cleanName}`;
+      let storagePath: string;
+      if (clientStoragePath && typeof clientStoragePath === 'string') {
+        const cleanPath = clientStoragePath.replace(/[^a-zA-Z0-9._/-]/g, '_').replace(/\.\./g, '');
+        storagePath = cleanPath.startsWith('cars/') ? cleanPath : `cars/${cleanPath}`;
+      } else if (exactFilename && filename && typeof filename === 'string') {
+        const cleanName = filename.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.\./g, '');
+        storagePath = `cars/${cleanName}`;
+      } else {
+        const cleanName = filename ? filename.replace(/[^a-zA-Z0-9._-]/g, '_') : `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${extension}`;
+        storagePath = `cars/${Date.now()}_${cleanName}`;
+      }
 
       // 1. Try Supabase Storage upload
       const supabase = getServerSupabase();
@@ -1258,15 +1305,16 @@ async function startServer() {
           } else {
             lastUploadError = upErr;
             console.warn(`Supabase storage upload error on ${STORAGE_BUCKET_NAME}:`, upErr.message);
-            // Secondary attempt with clean name directly
+            // Secondary attempt with leaf name directly
+            const leafName = path.basename(storagePath);
             const { error: retryErr } = await supabase.storage
               .from(STORAGE_BUCKET_NAME)
-              .upload(cleanName, buffer, {
+              .upload(leafName, buffer, {
                 contentType,
                 upsert: true
               });
             if (!retryErr) {
-              const { data: fbData } = supabase.storage.from(STORAGE_BUCKET_NAME).getPublicUrl(cleanName);
+              const { data: fbData } = supabase.storage.from(STORAGE_BUCKET_NAME).getPublicUrl(leafName);
               if (fbData?.publicUrl) {
                 res.json({ url: fbData.publicUrl, success: true, storage: 'supabase' });
                 return;
@@ -1439,7 +1487,7 @@ async function startServer() {
         const html = injectInitialCarsIntoHtml(template);
         res.status(200).set({
           'Content-Type': 'text/html',
-          'Cache-Control': 'public, max-age=30, stale-while-revalidate=60'
+          'Cache-Control': 'no-cache'
         }).send(html);
       } catch (e) {
         vite.ssrFixStacktrace(e as Error);
@@ -1457,14 +1505,14 @@ async function startServer() {
           const html = injectInitialCarsIntoHtml(template);
           res.status(200).set({
             'Content-Type': 'text/html',
-            'Cache-Control': 'public, max-age=30, stale-while-revalidate=60'
+            'Cache-Control': 'no-cache'
           }).send(html);
           return;
         }
       } catch (e) {
         console.warn('Could not inject cars into production index.html:', e);
       }
-      res.sendFile(path.join(distPath, 'index.html'));
+      res.set('Cache-Control', 'no-cache').sendFile(path.join(distPath, 'index.html'));
     });
   }
 

@@ -4,7 +4,8 @@ import {
   Settings, 
   Database, 
   RefreshCw, 
-  X 
+  X,
+  Images 
 } from 'lucide-react';
 import { ConnectionStatusState } from './adminTypes';
 import { STORAGE_BUCKET_NAME } from '../../services/supabaseClientInit';
@@ -17,6 +18,7 @@ interface AdminHeaderProps {
   setShowSettingsDropdown: React.Dispatch<React.SetStateAction<boolean>>;
   onOpenSettingsModal: () => void;
   onOpenRlsModal: () => void;
+  onOpenThumbnailModal?: () => void;
   onRunConnectionTest: () => void;
   onLogout: () => void;
   onClose: () => void;
@@ -30,6 +32,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   setShowSettingsDropdown,
   onOpenSettingsModal,
   onOpenRlsModal,
+  onOpenThumbnailModal,
   onRunConnectionTest,
   onLogout,
   onClose
@@ -212,6 +215,21 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
                         <div>
                           <div className="font-bold">RLS təhlükəsizlik</div>
                           <div className="text-[10px] text-slate-400">Baza təhlükəsizlik SQL-i</div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSettingsDropdown(false);
+                          onOpenThumbnailModal?.();
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-slate-200 hover:text-white hover:bg-slate-800 transition-colors"
+                      >
+                        <Images className="w-4 h-4 text-purple-400 shrink-0" />
+                        <div>
+                          <div className="font-bold">Miniatürlər (Thumbnails)</div>
+                          <div className="text-[10px] text-slate-400">Kiçik şəkilləri hazırla / yenilə</div>
                         </div>
                       </button>
 

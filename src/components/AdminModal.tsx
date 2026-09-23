@@ -11,7 +11,8 @@ import {
   uploadImageToSupabaseStorage, 
   deleteImagesFromSupabaseStorage,
   isSupabaseStorageUrl, 
-  downloadExternalImageAsBlob 
+  downloadExternalImageAsBlob,
+  uploadThumbnailForImage 
 } from '../services/imageStorageService';
 import { 
   upsertCarToSupabase, 
@@ -41,6 +42,7 @@ import { CarListToolbar } from './admin/CarListToolbar';
 import { CarList } from './admin/CarList';
 import { CarFormModal } from './admin/CarFormModal';
 import { SupabaseSettingsModal, RlsModal } from './admin/AdminModals';
+import { ThumbnailBackfillModal } from './admin/ThumbnailBackfillModal';
 import { useAdminAuth } from './admin/useAdminAuth';
 import { useCarImages } from './admin/useCarImages';
 import { useSupabaseSettings } from './admin/useSupabaseSettings';
@@ -68,6 +70,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   // Auth Hook
   const { isAuthenticated, setIsAuthenticated, handleLogout } = useAdminAuth(isOpen, showToast);
+
+  const [showThumbnailModal, setShowThumbnailModal] = useState(false);
 
   // Supabase Settings Hook
   const {
@@ -448,6 +452,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             throw new Error(`Şəkil Supabase Storage-ə yüklənə bilmədi (${fileNameToUpload}): ${uploadRes.error || 'Xəta'}`);
           }
           finalImageUrls.push(uploadRes.publicUrl);
+          uploadThumbnailForImage(fileToUpload, uploadRes.publicUrl).catch(tErr => console.warn('Thumb upload notice:', tErr));
 
           // Revoke temporary blob URL
           try {
@@ -465,6 +470,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           const upRes = await uploadImageToSupabaseStorage(item.url, `car-${Date.now()}-${Math.random().toString(36).substr(2, 6)}.webp`);
           if (upRes.success && upRes.publicUrl) {
             finalImageUrls.push(upRes.publicUrl);
+            uploadThumbnailForImage(item.url, upRes.publicUrl).catch(tErr => console.warn('Thumb upload notice:', tErr));
           } else {
             throw new Error(`Şəkil Supabase Storage-ə yüklənə bilmədi: ${upRes.error || 'Xəta'}`);
           }
@@ -500,6 +506,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               const upRes = await uploadImageToSupabaseStorage(fileToUpload, nameToUpload);
               if (upRes.success && upRes.publicUrl) {
                 finalImageUrls.push(upRes.publicUrl);
+                uploadThumbnailForImage(fileToUpload, upRes.publicUrl).catch(tErr => console.warn('Thumb upload notice:', tErr));
               } else {
                 throw new Error(upRes.error || 'Yüklənmə xətası');
               }
@@ -686,6 +693,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         setShowSettingsDropdown={setShowSettingsDropdown}
         onOpenSettingsModal={() => setShowSupabaseSettingsModal(true)}
         onOpenRlsModal={() => setShowRlsModal(true)}
+        onOpenThumbnailModal={() => setShowThumbnailModal(true)}
         onRunConnectionTest={runConnectionTest}
         onLogout={handleLogout}
         onClose={onClose}
@@ -863,6 +871,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           onClose={() => setShowRlsModal(false)}
           copiedRls={copiedRls}
           onCopyRls={handleCopyRls}
+        />
+      )}
+
+      {/* Thumbnail Backfill Modal */}
+      {isAuthenticated && showThumbnailModal && (
+        <ThumbnailBackfillModal
+          isOpen={showThumbnailModal}
+          onClose={() => setShowThumbnailModal(false)}
+          cars={cars}
         />
       )}
 

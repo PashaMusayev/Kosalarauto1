@@ -101,6 +101,106 @@ export function getValidImageUrl(url?: string, options?: { width?: number; quali
 }
 
 /**
+ * In-memory set of thumbnail URLs that failed to load during the current browser session.
+ * Prevents repeating 404 network storms on slow connections.
+ */
+const failedThumbnailUrls = new Set<string>();
+
+export function markThumbnailFailed(url?: string): void {
+  if (!url || typeof url !== 'string') return;
+  failedThumbnailUrls.add(url.trim());
+}
+
+export function isThumbnailFailed(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  return failedThumbnailUrls.has(url.trim());
+}
+
+/**
+ * Deterministically derives the thumbnail URL for a given full-size car image URL.
+ * Suffix convention: name.webp -> name__thumb.webp (always .webp)
+ * 
+ * If the thumbnail has failed during this session (recorded in failedThumbnailUrls),
+ * returns the full-size URL directly without attempting the thumbnail.
+ */
+export function getThumbnailUrl(fullUrl?: string): string {
+  if (!fullUrl || typeof fullUrl !== 'string' || fullUrl.trim() === '') {
+    return DEFAULT_VEHICLE_PLACEHOLDER;
+  }
+
+  const clean = fullUrl.trim();
+
+  // Non-image or transient formats: return as-is
+  if (
+    clean.startsWith('data:') ||
+    clean.startsWith('blob:') ||
+    clean.endsWith('.svg') ||
+    clean.includes('__thumb.')
+  ) {
+    return clean;
+  }
+
+  // Only apply thumbnail convention to Supabase Storage or local /pics/uploads/ paths
+  const isSupabase = clean.includes('.supabase.co/storage/v1/') || clean.includes('/storage/v1/object/public/');
+  const isLocalUpload = clean.includes('/pics/uploads/');
+  const isBucketRelative = clean.startsWith('cars/');
+
+  if (!isSupabase && !isLocalUpload && !isBucketRelative) {
+    // External third-party URL (e.g. unsplash, external hosting): return full URL as-is
+    return clean;
+  }
+
+  // Parse URL components to separate query/hash from the file path
+  const [urlWithoutHash] = clean.split('#');
+  const [urlWithoutQuery, query] = urlWithoutHash.split('?');
+
+  const lastSlash = urlWithoutQuery.lastIndexOf('/');
+  const lastDot = urlWithoutQuery.lastIndexOf('.');
+
+  if (lastDot <= lastSlash) {
+    // No file extension detected
+    return clean;
+  }
+
+  const basePath = urlWithoutQuery.substring(0, lastDot);
+  const candidateThumbUrl = `${basePath}__thumb.webp${query ? `?${query}` : ''}`;
+
+  // If this thumbnail previously failed in this session, avoid re-requesting a 404
+  if (failedThumbnailUrls.has(candidateThumbUrl)) {
+    return clean;
+  }
+
+  return candidateThumbUrl;
+}
+
+/**
+ * Error handler specifically for thumbnail <img> elements.
+ * 1. Marks candidate thumbnail URL as failed so subsequent renders bypass it.
+ * 2. Attempts falling back to the full-size image URL.
+ * 3. If the full-size image also fails, uses handleImageLoadError for retry/placeholder.
+ */
+export function handleThumbnailLoadError(
+  imgElement: HTMLImageElement,
+  fullUrl: string,
+  fallbackSrc: string = DEFAULT_VEHICLE_PLACEHOLDER
+): void {
+  const currentSrc = imgElement.src || '';
+  if (currentSrc) {
+    markThumbnailFailed(currentSrc);
+  }
+
+  const validFullUrl = getValidImageUrl(fullUrl);
+  if (validFullUrl && validFullUrl !== currentSrc) {
+    // Try the full-size image
+    imgElement.onerror = () => handleImageLoadError(imgElement, fallbackSrc);
+    imgElement.src = validFullUrl;
+    return;
+  }
+
+  handleImageLoadError(imgElement, fallbackSrc);
+}
+
+/**
  * Robust image error handler with automatic retry and bucket normalization
  */
 export function handleImageLoadError(

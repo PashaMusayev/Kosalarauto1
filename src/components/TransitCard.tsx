@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Heart } from 'lucide-react';
 import { TransitCar } from '../types';
 import { prefetchImages } from '../utils/imagePreloader';
-import { getValidImageUrl, handleImageLoadError } from '../utils/imageFallback';
+import { getValidImageUrl, getThumbnailUrl, handleThumbnailLoadError } from '../utils/imageFallback';
 
 interface TransitCardProps {
   car: TransitCar;
@@ -28,7 +28,8 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
   const safeLocation = car?.city || car?.location || 'Bakı';
   const safeBaseLength = car?.baseLength || '';
 
-  const primaryImageUrl = getValidImageUrl(car?.primaryImage || (car?.images && car.images[0]));
+  const fullPrimaryUrl = getValidImageUrl(car?.primaryImage || (car?.images && car.images[0]));
+  const thumbImageUrl = getThumbnailUrl(fullPrimaryUrl);
   const [imageLoaded, setImageLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -36,7 +37,7 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
     if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
       setImageLoaded(true);
     }
-  }, [primaryImageUrl]);
+  }, [thumbImageUrl]);
 
   // Arxa fonda elanın digər şəkillərini qabaqcadan kesə yüklə (hover / touch anında)
   const handlePrefetch = () => {
@@ -66,13 +67,13 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
 
         <img
           ref={imgRef}
-          src={primaryImageUrl}
+          src={thumbImageUrl}
           alt={safeTitle}
           referrerPolicy="no-referrer"
           draggable={false}
           onLoad={() => setImageLoaded(true)}
           onError={(e) => {
-            handleImageLoadError(e.currentTarget);
+            handleThumbnailLoadError(e.currentTarget, fullPrimaryUrl);
             setImageLoaded(true);
           }}
           className={`w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300 relative z-[1] select-none ${

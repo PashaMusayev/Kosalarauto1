@@ -3,7 +3,8 @@ import { FormImageItem } from './adminTypes';
 import { 
   isSupabaseStorageUrl, 
   downloadExternalImageAsBlob, 
-  uploadImageToSupabaseStorage 
+  uploadImageToSupabaseStorage,
+  uploadThumbnailForImage 
 } from '../../services/imageStorageService';
 import { compressImage } from '../../utils/imageCompressor';
 
@@ -136,6 +137,11 @@ export function useCarImages(showToast: (msg: string) => void) {
       if (!uploadRes.success || !uploadRes.publicUrl) {
         throw new Error(uploadRes.error || "Şəkil Supabase Storage anbarına yazıla bilmədi");
       }
+
+      // Generate and upload thumbnail (~480px WebP) alongside full image
+      uploadThumbnailForImage(fileToUpload, uploadRes.publicUrl).catch(thumbErr => {
+        console.warn('Background thumbnail creation notice:', thumbErr);
+      });
 
       // 5. Uğurlu upload-dan sonra Supabase Storage-in RƏSMİ PUBLIC URL-ni form siyahısına qeyd et
       const newItem: FormImageItem = {

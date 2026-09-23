@@ -2,7 +2,7 @@ import React from 'react';
 import { X, Heart, Trash2, MessageCircle, Eye, Truck } from 'lucide-react';
 import { TransitCar } from '../types';
 import { WHATSAPP_NUMBER } from '../data/transits';
-import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl } from '../utils/imageFallback';
+import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl, getThumbnailUrl, handleThumbnailLoadError } from '../utils/imageFallback';
 import { trackWhatsAppClick } from '../services/analyticsService';
 import { useBodyScrollLock } from '../utils/scrollLock';
 
@@ -69,20 +69,21 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
                 `Salam! Kosalar Auto, seçilmişlərimdə olan bu avtomobil haqqında məlumat almaq istəyirəm:\n\n🚗 ${car?.title || 'Avtomobil'}${car?.year ? ` (${car.year}-ci il)` : ''} - ${(car?.price || 0).toLocaleString()} AZN\n\n🔗 Elanın linki:\n${carLink}`
               );
 
+              const fullFavUrl = getValidImageUrl(car?.primaryImage || (car?.images && car.images[0]));
+              const thumbFavUrl = getThumbnailUrl(fullFavUrl);
+
               return (
                 <div
                   key={car?.id}
                   className="bg-[#F8FAFC] rounded-2xl p-3.5 border border-slate-200 flex items-center gap-3 relative group"
                 >
                   <img
-                    src={getValidImageUrl(car?.primaryImage)}
+                    src={thumbFavUrl}
                     alt={car?.title || 'Ford Transit'}
                     referrerPolicy="no-referrer"
                     className="w-20 h-16 object-cover rounded-xl bg-slate-200 shrink-0"
                     onError={(e) => {
-                      const img = e.target as HTMLImageElement;
-                      img.onerror = null;
-                      img.src = DEFAULT_VEHICLE_PLACEHOLDER;
+                      handleThumbnailLoadError(e.currentTarget, fullFavUrl, DEFAULT_VEHICLE_PLACEHOLDER);
                     }}
                   />
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Heart } from 'lucide-react';
 import { TransitCar } from '../../types';
-import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl } from '../../utils/imageFallback';
+import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl, getThumbnailUrl, handleThumbnailLoadError } from '../../utils/imageFallback';
 
 interface DetailSimilarCarsProps {
   similarCars: TransitCar[];
@@ -43,6 +43,10 @@ export const DetailSimilarCars: React.FC<DetailSimilarCarsProps> = ({
           const simLocation = simCar.location || simCar.city || 'Bakı';
           const simIsFav = favorites ? favorites.includes(simCar.id) : false;
 
+          const rawImg = simCar.primaryImage || (simCar.images && simCar.images[0]);
+          const fullImgUrl = getValidImageUrl(rawImg);
+          const thumbImgUrl = getThumbnailUrl(fullImgUrl);
+
           return (
             <div
               key={simCar.id}
@@ -53,12 +57,12 @@ export const DetailSimilarCars: React.FC<DetailSimilarCarsProps> = ({
               {/* Image box (Turbo.az 4:3 aspect, bg-slate-100, object-cover) */}
               <div className="relative aspect-[4/3] bg-slate-100 overflow-hidden flex items-center justify-center">
                 <img
-                  src={getValidImageUrl(simCar.primaryImage || (simCar.images && simCar.images[0]))}
+                  src={thumbImgUrl}
                   alt={simTitle}
                   loading="lazy"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = DEFAULT_VEHICLE_PLACEHOLDER;
+                    handleThumbnailLoadError(e.currentTarget, fullImgUrl, DEFAULT_VEHICLE_PLACEHOLDER);
                   }}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />

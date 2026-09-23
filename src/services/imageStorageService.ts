@@ -3,6 +3,8 @@
  */
 import { STORAGE_BUCKET_NAME } from './supabaseClientInit';
 import { getAdminAuthHeaders } from './adminAuthService';
+import { getThumbnailUrl } from '../utils/imageFallback';
+import { createThumbnail, CompressionResult } from '../utils/imageCompressor';
 
 /**
  * Helper to check whether an image URL is already hosted in our Supabase Storage
@@ -102,7 +104,8 @@ export async function downloadExternalImageAsBlob(
 export async function uploadImageToSupabaseStorage(
   fileOrData: File | Blob | string,
   fileName?: string,
-  maxRetries = 2
+  maxRetries = 2,
+  storagePath?: string
 ): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
   try {
     let dataUrl: string;
@@ -153,7 +156,8 @@ export async function uploadImageToSupabaseStorage(
           },
           body: JSON.stringify({
             dataUrl,
-            filename: fileName
+            filename: fileName,
+            storagePath
           })
         });
 
@@ -177,6 +181,78 @@ export async function uploadImageToSupabaseStorage(
     console.error('Image upload exception:', err);
     const msg = err instanceof Error ? err.message : 'Naməlum xəta';
     return { success: false, error: `Şəkil yüklənmə xətası: ${msg}` };
+  }
+}
+
+/**
+ * Extracts normalized thumbnail storage path (e.g. 'cars/1788000_abc__thumb.webp') from a thumbnail URL.
+ */
+export function getThumbnailStoragePath(thumbUrl: string): string | null {
+  if (!thumbUrl || typeof thumbUrl !== 'string') return null;
+  const clean = thumbUrl.trim().split('?')[0].split('#')[0];
+  const match = clean.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/[^/?#]+\/(.+)$/i);
+  if (match && match[1]) {
+    const decoded = decodeURIComponent(match[1]);
+    return decoded.startsWith('cars/') ? decoded : `cars/${decoded}`;
+  }
+  if (clean.includes('/pics/uploads/')) {
+    const filename = clean.split('/pics/uploads/')[1];
+    return filename ? `cars/${filename}` : null;
+  }
+  if (clean.startsWith('cars/')) {
+    return clean;
+  }
+  const extracted = extractStoragePathFromUrl(clean);
+  if (extracted) {
+    return extracted.startsWith('cars/') ? extracted : `cars/${extracted}`;
+  }
+  return null;
+}
+
+/**
+ * Generates and uploads an optimized thumbnail (~480px WebP, quality ~0.70)
+ * for a corresponding full-size image, using the deterministic naming convention.
+ */
+export async function uploadThumbnailForImage(
+  sourceImage: File | Blob | string,
+  fullImageUrl: string
+): Promise<{ success: boolean; thumbUrl?: string; error?: string }> {
+  try {
+    const thumbUrl = getThumbnailUrl(fullImageUrl);
+    if (!thumbUrl || thumbUrl === fullImageUrl) {
+      return { success: false, error: 'Could not determine thumbnail URL' };
+    }
+
+    const storagePath = getThumbnailStoragePath(thumbUrl);
+    if (!storagePath) {
+      return { success: false, error: 'Could not extract storage path for thumbnail' };
+    }
+
+    // Produce ~480px WebP thumbnail
+    let compRes: CompressionResult;
+    if (typeof sourceImage === 'string') {
+      const { blob } = await downloadExternalImageAsBlob(sourceImage);
+      compRes = await createThumbnail(blob, 'thumb.webp');
+    } else {
+      compRes = await createThumbnail(sourceImage, 'thumb.webp');
+    }
+
+    const uploadRes = await uploadImageToSupabaseStorage(
+      compRes.file,
+      undefined,
+      2,
+      storagePath
+    );
+
+    return {
+      success: Boolean(uploadRes.success),
+      thumbUrl: uploadRes.publicUrl || thumbUrl,
+      error: uploadRes.error
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('Upload thumbnail notice:', msg);
+    return { success: false, error: msg };
   }
 }
 

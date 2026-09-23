@@ -9,7 +9,7 @@ import {
   MoreVertical
 } from 'lucide-react';
 import { TransitCar } from '../../types';
-import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl } from '../../utils/imageFallback';
+import { DEFAULT_VEHICLE_PLACEHOLDER, getValidImageUrl, getThumbnailUrl, handleThumbnailLoadError } from '../../utils/imageFallback';
 
 interface ActiveMenuPosition {
   carId: string | number;
@@ -127,13 +127,11 @@ export const CarList: React.FC<CarListProps> = ({
                 <div className="flex items-start gap-3">
                   <div className="w-20 h-16 rounded-lg overflow-hidden bg-slate-800 border border-slate-700 shrink-0 relative">
                     <img 
-                      src={getValidImageUrl(car.primaryImage)} 
+                      src={getThumbnailUrl(getValidImageUrl(car.primaryImage))} 
                       alt={car.title} 
                       className="w-full h-full object-cover" 
                       onError={(e) => { 
-                        const img = e.target as HTMLImageElement;
-                        img.onerror = null;
-                        img.src = DEFAULT_VEHICLE_PLACEHOLDER; 
+                        handleThumbnailLoadError(e.currentTarget, getValidImageUrl(car.primaryImage), DEFAULT_VEHICLE_PLACEHOLDER);
                       }}
                     />
                     {isSold && (
@@ -305,13 +303,11 @@ export const CarList: React.FC<CarListProps> = ({
                       <td className="py-2.5 px-4 whitespace-nowrap">
                         <div className="w-12 h-10 rounded-lg overflow-hidden bg-slate-800 border border-slate-700 shrink-0 relative">
                           <img 
-                            src={getValidImageUrl(car.primaryImage)} 
+                            src={getThumbnailUrl(getValidImageUrl(car.primaryImage))} 
                             alt={car.title} 
                             className="w-full h-full object-cover" 
                             onError={(e) => { 
-                              const img = e.target as HTMLImageElement;
-                              img.onerror = null;
-                              img.src = DEFAULT_VEHICLE_PLACEHOLDER; 
+                              handleThumbnailLoadError(e.currentTarget, getValidImageUrl(car.primaryImage), DEFAULT_VEHICLE_PLACEHOLDER);
                             }}
                           />
                           {isSold && (

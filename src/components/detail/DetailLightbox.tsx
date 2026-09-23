@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { X, Heart, Phone, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PHONE_NUMBER } from '../../data/transits';
-import { getValidImageUrl } from '../../utils/imageFallback';
+import { getValidImageUrl, getThumbnailUrl, handleThumbnailLoadError } from '../../utils/imageFallback';
 import { TurboImageSlider } from '../TurboImageSlider';
 
 interface DetailLightboxProps {
@@ -306,6 +306,8 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
                   const isSelected = idx === activeImageIndex;
                   const isPreview = previewIndex !== null && idx === previewIndex;
                   const isHighlight = isPreview || (previewIndex === null && isSelected);
+                  const fullUrl = getValidImageUrl(img);
+                  const thumbUrl = getThumbnailUrl(fullUrl);
 
                   return (
                     <button
@@ -328,11 +330,12 @@ export const DetailLightbox: React.FC<DetailLightboxProps> = ({
                       title={`${idx + 1}-ci şəkil`}
                     >
                       <img
-                        src={getValidImageUrl(img)}
+                        src={thumbUrl}
                         alt={`Önizləmə ${idx + 1}`}
                         className="w-full h-full object-cover pointer-events-none select-none"
                         referrerPolicy="no-referrer"
                         loading="lazy"
+                        onError={(e) => handleThumbnailLoadError(e.currentTarget, fullUrl)}
                       />
                     </button>
                   );
