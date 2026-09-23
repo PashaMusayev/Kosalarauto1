@@ -105,6 +105,9 @@ export default function App() {
     transitsRef.current = transits;
   }, [transits]);
 
+  const detailOpenedFromCatalogRef = useRef<boolean>(false);
+  const initialCarHandledRef = useRef<boolean>(false);
+
   // Determine if the current route is 404 (Not Found)
   // Valid routes: '/' (home/catalog), '/admin444', '/haqqimizda', '/elaqe'
   const isHomeRoute = currentPath === '/' || currentPath === '' || currentPath === '/index.html';
@@ -232,9 +235,22 @@ export default function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const carId = params.get('car');
-      if (carId) {
-        const matchedCar = transits.find(c => c.id.toLowerCase() === carId.toLowerCase());
+      if (carId && !initialCarHandledRef.current) {
+        const list = transits.length > 0 ? transits : INITIAL_TRANSITS;
+        const matchedCar = list.find(c => c.id.toLowerCase() === carId.toLowerCase());
         if (matchedCar) {
+          initialCarHandledRef.current = true;
+          // Direct/shared ?car= link visit: give a synthetic catalog entry underneath
+          if (!window.history.state?.carModal) {
+            const originalUrl = window.location.href;
+            const catalogUrl = new URL(originalUrl);
+            catalogUrl.searchParams.delete('car');
+            catalogUrl.searchParams.delete('overlay');
+            catalogUrl.searchParams.delete('photo');
+            window.history.replaceState({}, '', catalogUrl.toString());
+            window.history.pushState({ carModal: true, carDepth: 1 }, '', originalUrl);
+          }
+          detailOpenedFromCatalogRef.current = true;
           setSelectedCar(matchedCar);
         }
       }
@@ -263,7 +279,7 @@ export default function App() {
         const carId = params.get('car');
         if (carId) {
           const list = transitsRef.current.length > 0 ? transitsRef.current : transits;
-          const matchedCar = list.find(c => c.id.toLowerCase() === carId.toLowerCase());
+          const matchedCar = (list.length > 0 ? list : INITIAL_TRANSITS).find(c => c.id.toLowerCase() === carId.toLowerCase());
           setNavigationDirection('back');
           setSelectedCar(matchedCar || null);
         } else {
@@ -343,7 +359,6 @@ export default function App() {
     setAdminOpen(false);
   }, []);
 
-  const detailOpenedFromCatalogRef = useRef<boolean>(false);
   const pendingSectionRef = useRef<string | null>(null);
 
   // Sync modal state with URL - opening from catalog or favorites drawer
@@ -366,7 +381,7 @@ export default function App() {
     setNavigationDirection('forward');
     setSelectedCar(car);
     try {
-      const currentDepth = (window.history.state && typeof window.history.state.carDepth === 'number')
+      const currentDepth = (window.history.state && typeof window.history.state.carDepth === 'number' && window.history.state.carDepth > 0)
         ? window.history.state.carDepth
         : 1;
       const nextDepth = currentDepth + 1;
@@ -382,12 +397,12 @@ export default function App() {
   const handleCloseDetail = useCallback(() => {
     try {
       const state = window.history.state;
-      if (state?.carModal && detailOpenedFromCatalogRef.current) {
+      if (state?.carModal) {
         detailOpenedFromCatalogRef.current = false;
         const depth = (typeof state.carDepth === 'number' && state.carDepth > 0) ? state.carDepth : 1;
         window.history.go(-depth);
       } else {
-        // Fallback for direct link in a fresh tab with no prior carModal history pushed by this site
+        // Defensive fallback for fresh tab with no prior carModal history pushed by this site
         detailOpenedFromCatalogRef.current = false;
         setSelectedCar(null);
         const url = new URL(window.location.href);
@@ -406,10 +421,10 @@ export default function App() {
   const handleBackDetail = useCallback(() => {
     try {
       const state = window.history.state;
-      if (state?.carModal && detailOpenedFromCatalogRef.current) {
+      if (state?.carModal) {
         window.history.back();
       } else {
-        // Fallback for direct link in a fresh tab
+        // Defensive fallback for fresh tab
         detailOpenedFromCatalogRef.current = false;
         setSelectedCar(null);
         const url = new URL(window.location.href);
