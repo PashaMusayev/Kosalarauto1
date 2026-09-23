@@ -20,6 +20,7 @@ import { DetailMobileHeader } from './detail/DetailMobileHeader';
 import { DetailDesktopSidebar } from './detail/DetailDesktopSidebar';
 import { DetailMobileTitleBlock } from './detail/DetailMobileTitleBlock';
 import { DetailMobileSpecs } from './detail/DetailMobileSpecs';
+import { DetailSpecTable } from './detail/DetailSpecTable';
 import { DetailFeaturesAndShowroom } from './detail/DetailFeaturesAndShowroom';
 import { DetailSimilarCars } from './detail/DetailSimilarCars';
 import { DetailMobileBottomBar } from './detail/DetailMobileBottomBar';
@@ -468,46 +469,58 @@ const TransitDetailCard: React.FC<TransitDetailCardProps> = ({
       <div ref={scrollContainerRef} className="overflow-y-auto flex-1 min-h-0 bg-white block w-full overscroll-contain">
         {/* RESPONSIVE HERO SECTION */}
         <div className="flex flex-col md:flex-row md:items-start w-full bg-white border-b border-slate-200">
-          {/* Sol Sütun (Şəkil Sahəsi - Desktopda 60% enində, sabit 4:3 nisbətində, tam qara arxafon) */}
-          <div className="w-full md:w-[58%] lg:w-[60%] shrink-0 bg-black flex items-center justify-center overflow-hidden relative aspect-[4/3] md:aspect-[4/3]">
-            <TurboImageSlider
-              key={`modal-slider-${car?.id}`}
-              images={imagesList}
-              activeImageIndex={activeImageIndex}
-              onIndexChange={(idx) => {
-                setActiveImageIndex(idx);
-                onParentActiveImageChange(idx);
-              }}
-              safeTitle={safeTitle}
-              onImageClick={(clickedIndex) => {
-                const idx = typeof clickedIndex === 'number' ? clickedIndex : activeImageIndex;
-                setActiveImageIndex(idx);
-                onParentActiveImageChange(idx);
-                openLightbox('detail', idx);
-              }}
-              onOpenPhotoGrid={openPhotoGrid}
-              disabledKeyNav={isLightboxOpen || isPhotoGridOpen}
-              className="w-full h-full aspect-[4/3] flex items-center justify-center bg-black"
-            />
+          {/* Sol Sütun (Şəkil Sahəsi və altında Xüsusiyyətlər Cədvəli - Desktopda 58%-60% enində) */}
+          <div className="w-full md:w-[58%] lg:w-[60%] shrink-0 flex flex-col bg-white">
+            {/* Şəkil Sahəsi - sabit 4:3 nisbətində, tam qara arxafon */}
+            <div className="w-full bg-black flex items-center justify-center overflow-hidden relative aspect-[4/3]">
+              <TurboImageSlider
+                key={`modal-slider-${car?.id}`}
+                images={imagesList}
+                activeImageIndex={activeImageIndex}
+                onIndexChange={(idx) => {
+                  setActiveImageIndex(idx);
+                  onParentActiveImageChange(idx);
+                }}
+                safeTitle={safeTitle}
+                onImageClick={(clickedIndex) => {
+                  const idx = typeof clickedIndex === 'number' ? clickedIndex : activeImageIndex;
+                  setActiveImageIndex(idx);
+                  onParentActiveImageChange(idx);
+                  openLightbox('detail', idx);
+                }}
+                onOpenPhotoGrid={openPhotoGrid}
+                disabledKeyNav={isLightboxOpen || isPhotoGridOpen}
+                className="w-full h-full aspect-[4/3] flex items-center justify-center bg-black"
+              />
+            </div>
+
+            {/* Xüsusiyyətlər Cədvəli (Yalnız Desktopda şəklin altında - Turbo.az 2 sütunlu stili) */}
+            <div className="hidden md:block p-6 lg:p-7 border-t border-slate-100 bg-white">
+              <DetailSpecTable
+                safeLocation={safeLocation}
+                safeMake={safeMake}
+                safeModel={safeModel}
+                safeYear={safeYear}
+                safeBodyType={safeBodyType}
+                safeSeatCount={safeSeatCount}
+                safeColor={safeColor}
+                safeEngine={safeEngine}
+                safeHp={safeHp}
+                safeFuelType={safeFuelType}
+                safeMileage={safeMileage}
+                safeTransmission={safeTransmission}
+                safeWheelDrive={safeWheelDrive}
+                safeBaseLength={safeBaseLength}
+                safeCondition={safeCondition}
+              />
+            </div>
           </div>
 
-          {/* Sağ Sütun (Məlumat və Əlaqə Sahəsi - YALNIZ Desktopda 40% enində) */}
+          {/* Sağ Sütun (Qısa və Yapışqan Qiymət/Əlaqə Kartı - YALNIZ Desktopda 40% enində) */}
           <DetailDesktopSidebar
             safePrice={safePrice}
             vehicleMainTitle={vehicleMainTitle}
             safeMileage={safeMileage}
-            safeLocation={safeLocation}
-            safeYear={safeYear}
-            safeEngine={safeEngine}
-            safeHp={safeHp}
-            safeFuelType={safeFuelType}
-            safeTransmission={safeTransmission}
-            safeWheelDrive={safeWheelDrive}
-            safeBodyType={safeBodyType}
-            safeColor={safeColor}
-            safeSeatCount={safeSeatCount}
-            safeBaseLength={safeBaseLength}
-            safeCondition={safeCondition}
             whatsappUrl={whatsappUrl}
           />
         </div>

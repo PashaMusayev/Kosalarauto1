@@ -4,22 +4,10 @@ import { PHONE_NUMBER } from '../../data/transits';
 import whatsappLogo from '../../pics/whatsapp logo.png';
 import { trackWhatsAppClick } from '../../services/analyticsService';
 
-interface DetailDesktopSidebarProps {
+export interface DetailDesktopSidebarProps {
   safePrice: string;
   vehicleMainTitle: string;
   safeMileage: string;
-  safeLocation: string;
-  safeYear: string;
-  safeEngine: string;
-  safeHp: string;
-  safeFuelType: string;
-  safeTransmission: string;
-  safeWheelDrive: string;
-  safeBodyType: string;
-  safeColor?: string;
-  safeSeatCount: string;
-  safeBaseLength: string;
-  safeCondition: string;
   whatsappUrl: string;
 }
 
@@ -27,32 +15,10 @@ export const DetailDesktopSidebar: React.FC<DetailDesktopSidebarProps> = ({
   safePrice,
   vehicleMainTitle,
   safeMileage,
-  safeLocation,
-  safeYear,
-  safeEngine,
-  safeHp,
-  safeFuelType,
-  safeTransmission,
-  safeWheelDrive,
-  safeBodyType,
-  safeColor,
-  safeSeatCount,
-  safeBaseLength,
-  safeCondition,
   whatsappUrl,
 }) => {
-  const engineParts = [
-    safeEngine ? (safeEngine.toLowerCase().includes('l') ? safeEngine : `${safeEngine} L`) : '',
-    safeHp ? `${safeHp}` : '',
-    safeFuelType ? safeFuelType : ''
-  ].filter(Boolean);
-
-  const cleanWheelDrive = safeWheelDrive
-    ? safeWheelDrive.replace(/\s*\((?:FWD|RWD|AWD|4WD)\)/gi, '').trim()
-    : '';
-
   return (
-    <div className="hidden md:flex md:w-[42%] lg:w-[40%] flex-col p-6 lg:p-7 bg-white border-l border-slate-200">
+    <div className="hidden md:flex md:w-[42%] lg:w-[40%] flex-col p-6 lg:p-7 bg-white border-l border-slate-200 md:sticky md:top-0 md:self-start z-10">
       {/* Yuxarı Məlumatlar */}
       <div className="space-y-4">
         {/* 1. Qiymət */}
@@ -82,80 +48,10 @@ export const DetailDesktopSidebar: React.FC<DetailDesktopSidebarProps> = ({
             </span>
           </div>
         </div>
-
-        {/* 3. Xüsusiyyətlər (Yığcam Cədvəl - Turbo.az Stili) */}
-        <div className="border-t border-slate-200 pt-3 space-y-2 text-xs lg:text-sm">
-          {safeLocation ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Şəhər</span>
-              <span className="font-semibold text-slate-900">{safeLocation}</span>
-            </div>
-          ) : null}
-          {safeMileage !== '' && safeMileage !== undefined ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Yürüş</span>
-              <span className="font-semibold text-slate-900">{safeMileage} km</span>
-            </div>
-          ) : null}
-          {safeYear ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Buraxılış ili</span>
-              <span className="font-semibold text-slate-900">{safeYear}</span>
-            </div>
-          ) : null}
-          {engineParts.length > 0 ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Mühərrik</span>
-              <span className="font-semibold text-slate-900">{engineParts.join(' / ')}</span>
-            </div>
-          ) : null}
-          {safeTransmission ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Sürətlər qutusu</span>
-              <span className="font-semibold text-slate-900">{safeTransmission}</span>
-            </div>
-          ) : null}
-          {cleanWheelDrive ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Ötürücü</span>
-              <span className="font-semibold text-slate-900">{cleanWheelDrive}</span>
-            </div>
-          ) : null}
-          {safeBodyType ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Ban növü</span>
-              <span className="font-semibold text-slate-900">{safeBodyType}</span>
-            </div>
-          ) : null}
-          {safeColor ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Rəng</span>
-              <span className="font-semibold text-slate-900">{safeColor}</span>
-            </div>
-          ) : null}
-          {safeSeatCount ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Yerlərin sayı</span>
-              <span className="font-semibold text-slate-900">{safeSeatCount}</span>
-            </div>
-          ) : null}
-          {safeBaseLength ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Baza uzunluğu</span>
-              <span className="font-semibold text-slate-900">{safeBaseLength}</span>
-            </div>
-          ) : null}
-          {safeCondition ? (
-            <div className="grid grid-cols-[120px_1fr] items-baseline gap-2">
-              <span className="text-slate-500 font-normal">Vəziyyəti</span>
-              <span className="font-semibold text-emerald-700">{safeCondition}</span>
-            </div>
-          ) : null}
-        </div>
       </div>
 
-      {/* 4. Ən aşağıda bir-birinin altında iri və diqqətçəkən "Zəng et" və "WhatsApp ilə yaz" düymələri */}
-      <div className="pt-4 border-t border-slate-200 space-y-2.5 mt-5">
+      {/* Ən aşağıda bir-birinin altında iri və diqqətçəkən "Zəng et" və "WhatsApp ilə yaz" düymələri */}
+      <div className="pt-5 border-t border-slate-200 space-y-2.5 mt-5">
         <a
           href={`tel:${PHONE_NUMBER.replace(/\s+/g, '')}`}
           className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm lg:text-base rounded-xl flex items-center justify-center gap-2.5 transition-all shadow-md shadow-blue-600/20 active:scale-[0.99]"
