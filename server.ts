@@ -755,6 +755,114 @@ async function startServer() {
     });
   });
 
+  // Analytics Endpoints (Server-side tracking & Admin KPI)
+  const whatsappClickRateLimit = new Map<string, { count: number; resetAt: number }>();
+  let cachedServerWhatsAppClicks = 0;
+
+  // Cleanup rate limiter map every 5 minutes
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, entry] of whatsappClickRateLimit.entries()) {
+      if (now > entry.resetAt) {
+        whatsappClickRateLimit.delete(ip);
+      }
+    }
+  }, 5 * 60 * 1000);
+
+  // GET /api/analytics - Read analytics KPI (for Admin KPI card)
+  app.get('/api/analytics', async (_req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('analytics')
+          .select('whatsapp_clicks')
+          .eq('id', 1)
+          .maybeSingle();
+
+        if (!error && data && typeof data.whatsapp_clicks === 'number') {
+          cachedServerWhatsAppClicks = data.whatsapp_clicks;
+          res.json({ success: true, whatsappClicks: data.whatsapp_clicks });
+          return;
+        }
+      } catch (err) {
+        console.warn('GET /api/analytics Supabase query error:', err);
+      }
+    }
+    res.json({ success: true, whatsappClicks: cachedServerWhatsAppClicks });
+  });
+
+  // POST /api/analytics/whatsapp-click - Track WhatsApp click server-side
+  app.post('/api/analytics/whatsapp-click', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown').split(',')[0].trim();
+    
+    // Rate limit: max 20 clicks per 60 seconds per IP
+    const now = Date.now();
+    const entry = whatsappClickRateLimit.get(clientIp);
+    if (entry && now < entry.resetAt) {
+      if (entry.count >= 20) {
+        res.status(429).json({ success: false, error: 'Too many requests' });
+        return;
+      }
+      entry.count++;
+    } else {
+      whatsappClickRateLimit.set(clientIp, { count: 1, resetAt: now + 60000 });
+    }
+
+    // Input whitelist: optional carId string
+    let carId: string | undefined;
+    try {
+      let b = req.body;
+      if (typeof b === 'string') {
+        try { b = JSON.parse(b); } catch {}
+      }
+      if (b && typeof b === 'object' && typeof b.carId === 'string') {
+        carId = b.carId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 50);
+      }
+    } catch {}
+
+    const supabase = getServerSupabase();
+    let updatedClicks = cachedServerWhatsAppClicks + 1;
+
+    if (supabase) {
+      try {
+        // Query current count
+        const { data } = await supabase
+          .from('analytics')
+          .select('whatsapp_clicks')
+          .eq('id', 1)
+          .maybeSingle();
+
+        const currentVal = (data && typeof data.whatsapp_clicks === 'number') 
+          ? data.whatsapp_clicks 
+          : cachedServerWhatsAppClicks;
+        updatedClicks = currentVal + 1;
+
+        // Upsert to analytics table
+        await supabase
+          .from('analytics')
+          .upsert({
+            id: 1,
+            whatsapp_clicks: updatedClicks,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+
+        cachedServerWhatsAppClicks = updatedClicks;
+      } catch (err) {
+        console.warn('Server Supabase WhatsApp click sync error:', err);
+        cachedServerWhatsAppClicks++;
+        updatedClicks = cachedServerWhatsAppClicks;
+      }
+    } else {
+      cachedServerWhatsAppClicks++;
+      updatedClicks = cachedServerWhatsAppClicks;
+    }
+
+    res.json({ success: true, whatsappClicks: updatedClicks });
+  });
+
   // Cars Catalog APIs (Supabase Database + Persistent Fallback)
   app.get('/api/cars', async (req, res) => {
     res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
