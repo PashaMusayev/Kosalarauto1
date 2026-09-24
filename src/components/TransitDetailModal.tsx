@@ -1007,3 +1007,5 @@ export const TransitDetailModal: React.FC<TransitDetailModalProps> = ({
     </DetailModalErrorBoundary>
   );
 };
+
+export default TransitDetailModal;

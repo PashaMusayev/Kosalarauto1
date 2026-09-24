@@ -4,7 +4,6 @@ import { Hero } from './components/Hero';
 import { FilterBar } from './components/FilterBar';
 import { TransitCard } from './components/TransitCard';
 import { TransitCardSkeleton } from './components/TransitCardSkeleton';
-import { TransitDetailModal } from './components/TransitDetailModal';
 import { Pagination } from './components/Pagination';
 import { AboutUs } from './components/AboutUs';
 import { FavoritesDrawer } from './components/FavoritesDrawer';
@@ -17,12 +16,43 @@ import { TransitCar, FilterState } from './types';
 import { MessageCircle, Truck, Sparkles, FilterX } from 'lucide-react';
 import whatsappLogo from './pics/whatsapp logo.png';
 import salonFoto from './assets/images/Salonfoto.jpg';
-import { fetchCarsFromSupabase, fetchAllCarsFromApi } from './services/carService';
-import { getSupabaseClient } from './services/supabaseClientInit';
+import { fetchAllCarsFromApi } from './services/carService';
 import { trackWhatsAppClick } from './services/analyticsService';
 import { filterAndSortTransits, parseMultiFilter } from './utils/filterUtils';
+import { prefetchDetailModal } from './utils/detailModalPreloader';
 
+const TransitDetailModal = React.lazy(prefetchDetailModal);
 const AdminModal = React.lazy(() => import('./components/AdminModal'));
+
+const DetailModalFallback = () => (
+  <div 
+    className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/85 backdrop-blur-xs overflow-hidden"
+    aria-busy="true"
+    aria-label="Avtomobil məlumatları yüklənir"
+  >
+    <div className="relative max-w-2xl md:max-w-5xl lg:max-w-6xl w-full h-[100dvh] md:h-[90vh] bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 overflow-hidden flex flex-col animate-pulse">
+      <div className="h-14 border-b border-slate-100 flex items-center justify-between px-4 bg-slate-50/80">
+        <div className="h-4 w-32 bg-slate-200 rounded" />
+        <div className="h-8 w-8 bg-slate-200 rounded-full" />
+      </div>
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        <div className="w-full md:w-3/5 bg-slate-100 aspect-[4/3] md:aspect-auto flex items-center justify-center">
+          <div className="w-10 h-10 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+        <div className="w-full md:w-2/5 p-4 sm:p-6 space-y-4">
+          <div className="h-6 w-3/4 bg-slate-200 rounded" />
+          <div className="h-8 w-1/2 bg-slate-200 rounded" />
+          <div className="grid grid-cols-2 gap-3 pt-4">
+            <div className="h-12 bg-slate-100 rounded-lg" />
+            <div className="h-12 bg-slate-100 rounded-lg" />
+            <div className="h-12 bg-slate-100 rounded-lg" />
+            <div className="h-12 bg-slate-100 rounded-lg" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 const DEFAULT_FILTERS: FilterState = {
   brand: 'all',
@@ -138,6 +168,46 @@ export default function App() {
     return false;
   });
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [detailModalMounted, setDetailModalMounted] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return Boolean(params.get('car'));
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (selectedCar && !detailModalMounted) {
+      setDetailModalMounted(true);
+    }
+  }, [selectedCar, detailModalMounted]);
+
+  // Prefetch detail modal chunk during browser idle time after first paint
+  useEffect(() => {
+    let idleId: number | undefined;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+
+    if (typeof window !== 'undefined') {
+      if ('requestIdleCallback' in window) {
+        idleId = (window as any).requestIdleCallback(() => {
+          prefetchDetailModal();
+        }, { timeout: 2500 });
+      } else {
+        timerId = setTimeout(() => {
+          prefetchDetailModal();
+        }, 1200);
+      }
+    }
+
+    return () => {
+      if (idleId && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleId);
+      }
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+    };
+  }, []);
 
   // References to keep latest path and cars available in event listeners without re-binding
   const currentPathRef = useRef(currentPath);
@@ -215,6 +285,7 @@ export default function App() {
 
         // 2. Fallback: try fetching directly from Supabase with short timeout (5s) and at most 1 retry
         try {
+          const { fetchCarsFromSupabase } = await import('./services/supabaseFallbackService');
           const sbRes = await fetchCarsFromSupabase(1, 5000);
           if (isMounted && sbRes.success && Array.isArray(sbRes.data) && sbRes.data.length > 0) {
             setTransits(sbRes.data);
@@ -816,17 +887,21 @@ export default function App() {
       )}
 
       {/* Detail Modal */}
-      <TransitDetailModal
-        car={selectedCar}
-        onClose={handleCloseDetail}
-        onBack={handleBackDetail}
-        direction={navigationDirection}
-        isFavorite={selectedCar ? favorites.includes(selectedCar.id) : false}
-        onToggleFavorite={handleToggleFavorite}
-        allCars={transits}
-        onSelectCar={handleSelectSimilarCar}
-        favorites={favorites}
-      />
+      {detailModalMounted && (
+        <React.Suspense fallback={selectedCar ? <DetailModalFallback /> : null}>
+          <TransitDetailModal
+            car={selectedCar}
+            onClose={handleCloseDetail}
+            onBack={handleBackDetail}
+            direction={navigationDirection}
+            isFavorite={selectedCar ? favorites.includes(selectedCar.id) : false}
+            onToggleFavorite={handleToggleFavorite}
+            allCars={transits}
+            onSelectCar={handleSelectSimilarCar}
+            favorites={favorites}
+          />
+        </React.Suspense>
+      )}
 
       {/* Favorites Drawer */}
       <FavoritesDrawer

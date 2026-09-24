@@ -18,7 +18,7 @@ import {
   upsertCarToSupabase, 
   deleteCarFromSupabase, 
   updateCarStatusInSupabase 
-} from '../services/carService';
+} from '../services/adminCarService';
 import { fetchAnalyticsFromSupabase } from '../services/analyticsService';
 import { 
   getActiveSupabaseConfig, 

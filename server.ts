@@ -841,15 +841,19 @@ async function startServer() {
         updatedClicks = currentVal + 1;
 
         // Upsert to analytics table
-        await supabase
+        const { error: upErr } = await supabase
           .from('analytics')
           .upsert({
             id: 1,
-            whatsapp_clicks: updatedClicks,
-            updated_at: new Date().toISOString()
+            whatsapp_clicks: updatedClicks
           }, { onConflict: 'id' });
 
-        cachedServerWhatsAppClicks = updatedClicks;
+        if (!upErr) {
+          cachedServerWhatsAppClicks = updatedClicks;
+        } else {
+          console.warn('Server Supabase WhatsApp click upsert notice:', upErr.message);
+          cachedServerWhatsAppClicks = updatedClicks;
+        }
       } catch (err) {
         console.warn('Server Supabase WhatsApp click sync error:', err);
         cachedServerWhatsAppClicks++;

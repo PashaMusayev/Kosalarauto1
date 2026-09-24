@@ -1,10 +1,8 @@
 /**
- * Car Read & Write Operations Module (Protected API / DB)
+ * Public Car Read & Mapping Operations Module
+ * Pure client module with NO static Supabase SDK dependencies.
  */
 import { TransitCar } from '../types';
-import { getSupabaseClient } from './supabaseClientInit';
-import { getAdminAuthHeaders } from './adminAuthService';
-import { deleteImagesFromSupabaseStorage } from './imageStorageService';
 
 function normalizeBrand(brandRaw?: string, title?: string): string {
   const raw = (brandRaw || '').trim();
@@ -165,57 +163,6 @@ export function mapCarToSupabaseRow(car: TransitCar): Record<string, unknown> {
 }
 
 /**
- * Fetch cars directly from Supabase Database with timeout protection and retry mechanism (fallback only)
- */
-export async function fetchCarsFromSupabase(maxRetries = 1, timeoutMs = 5000): Promise<{ success: boolean; data?: TransitCar[]; error?: string }> {
-  const client = getSupabaseClient();
-  let lastError = '';
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) => {
-        timer = setTimeout(() => resolve({ data: null, error: { message: `Supabase sorğu vaxtı bitdi (Timeout - ${Math.round(timeoutMs / 1000)}s)` } }), timeoutMs);
-      });
-
-      const queryPromise = client
-        .from('cars')
-        .select('*')
-        .order('is_featured', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      const { data, error } = (await Promise.race([queryPromise, timeoutPromise])) as {
-        data: Record<string, unknown>[] | null;
-        error: { message: string } | null;
-      };
-      if (timer) clearTimeout(timer);
-
-      if (error) {
-        lastError = error.message;
-        if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 600));
-          continue;
-        }
-        return { success: false, error: error.message };
-      }
-
-      if (Array.isArray(data)) {
-        return { success: true, data: data.map(mapSupabaseRowToCar) };
-      }
-      return { success: true, data: [] };
-    } catch (err: unknown) {
-      lastError = err instanceof Error ? err.message : 'Baza əlaqə xətası';
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 600));
-        continue;
-      }
-    }
-  }
-
-  return { success: false, error: lastError || 'Baza sorğusu uğursuz oldu' };
-}
-
-/**
  * Shared helper to fetch all cars from /api/cars endpoint.
  * Gracefully normalizes both { success: true, cars: [...] } and legacy raw array responses.
  */
@@ -237,110 +184,5 @@ export async function fetchAllCarsFromApi(): Promise<{ success: boolean; cars: T
     const msg = err instanceof Error ? err.message : 'Serverlə əlaqə qurulmadı';
     console.error('fetchAllCarsFromApi exception:', err);
     return { success: false, cars: [], error: msg };
-  }
-}
-
-/**
- * Insert or Update single car via protected server API
- * Performs an atomic single-row upsert, avoiding full-table read-modify-replace race conditions.
- * Returns { success: true, cars?: TransitCar[] } or { success: false, error: string }
- */
-export async function upsertCarToSupabase(car: TransitCar): Promise<{ success: boolean; cars?: TransitCar[]; error?: string }> {
-  try {
-    const res = await fetch('/api/cars', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeaders()
-      },
-      body: JSON.stringify({ car })
-    });
-    let data: Record<string, unknown> | null = null;
-    try {
-      data = await res.json();
-    } catch {
-      data = null;
-    }
-    if (!res.ok || !data || !data.success) {
-      return { success: false, error: (typeof data?.error === 'string' ? data.error : null) || `Məlumat serverə yazıla bilmədi (${res.status})` };
-    }
-    return { success: true, cars: data.cars as TransitCar[] | undefined };
-  } catch (err: unknown) {
-    console.error('Car upsert exception:', err);
-    const msg = err instanceof Error ? err.message : 'Məlumat yadda saxlanılmadı';
-    return { success: false, error: `Server xətası: ${msg}` };
-  }
-}
-
-/**
- * Delete car from database and completely purge all its images via protected server API
- */
-export async function deleteCarFromSupabase(
-  carOrId: string | TransitCar,
-  optionalImages?: string[]
-): Promise<{ success: boolean; storageDeleted?: number; cars?: TransitCar[]; error?: string }> {
-  const carId = typeof carOrId === 'string' ? carOrId : carOrId.id;
-
-  try {
-    // 1. If extra image URLs provided, trigger deletion via protected server endpoint
-    if (optionalImages && optionalImages.length > 0) {
-      deleteImagesFromSupabaseStorage(optionalImages).catch(e => {
-        console.warn('Optional storage cleanup notice:', e);
-      });
-    }
-
-    // 2. Delete car and associated storage files via protected server endpoint
-    const res = await fetch(`/api/cars/${encodeURIComponent(carId)}`, {
-      method: 'DELETE',
-      headers: getAdminAuthHeaders()
-    });
-    let data: Record<string, unknown> | null = null;
-    try {
-      data = await res.json();
-    } catch {
-      data = null;
-    }
-    if (!res.ok || !data || !data.success) {
-      return { success: false, error: (typeof data?.error === 'string' ? data.error : null) || `Avtomobil silinmədi (${res.status})` };
-    }
-
-    return { success: true, storageDeleted: 1, cars: data.cars as TransitCar[] | undefined };
-  } catch (err: unknown) {
-    console.error('Car delete exception:', err);
-    const msg = err instanceof Error ? err.message : 'Serverlə əlaqə xətası';
-    return { success: false, error: msg };
-  }
-}
-
-/**
- * Update single car status ('active' | 'sold') via atomic protected server endpoint
- */
-export async function updateCarStatusInSupabase(
-  carId: string, 
-  status: 'active' | 'sold'
-): Promise<{ success: boolean; cars?: TransitCar[]; error?: string }> {
-  try {
-    const res = await fetch(`/api/cars/${encodeURIComponent(carId)}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeaders()
-      },
-      body: JSON.stringify({ status })
-    });
-    let data: Record<string, unknown> | null = null;
-    try {
-      data = await res.json();
-    } catch {
-      data = null;
-    }
-    if (!res.ok || !data || !data.success) {
-      return { success: false, error: (typeof data?.error === 'string' ? data.error : null) || `Status yenilənmədi (${res.status})` };
-    }
-    return { success: true, cars: data.cars as TransitCar[] | undefined };
-  } catch (err: unknown) {
-    console.error('Status update exception:', err);
-    const msg = err instanceof Error ? err.message : 'Serverlə əlaqə xətası';
-    return { success: false, error: msg };
   }
 }

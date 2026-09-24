@@ -22,16 +22,24 @@ export {
   testSupabaseConnection
 } from './supabaseClientInit';
 
-// 2. Car Read & Write Operations (Protected API / DB)
+// 2. Car Read Operations
 export {
   mapSupabaseRowToCar,
   mapCarToSupabaseRow,
-  fetchCarsFromSupabase,
-  fetchAllCarsFromApi,
+  fetchAllCarsFromApi
+} from './carService';
+
+// 2b. Supabase Direct Fallback
+export {
+  fetchCarsFromSupabase
+} from './supabaseFallbackService';
+
+// 2c. Car Admin Mutation Operations
+export {
   upsertCarToSupabase,
   deleteCarFromSupabase,
   updateCarStatusInSupabase
-} from './carService';
+} from './adminCarService';
 
 // 3. Image Storage & Asset Management
 export {

@@ -3,6 +3,7 @@ import { Heart } from 'lucide-react';
 import { TransitCar } from '../types';
 import { prefetchImages } from '../utils/imagePreloader';
 import { getValidImageUrl, getThumbnailUrl, handleThumbnailLoadError } from '../utils/imageFallback';
+import { prefetchDetailModal } from '../utils/detailModalPreloader';
 
 interface TransitCardProps {
   car: TransitCar;
@@ -41,6 +42,7 @@ export const TransitCard = React.memo<TransitCardProps>(function TransitCard({
 
   // Arxa fonda elanın digər şəkillərini qabaqcadan kesə yüklə (hover / touch anında)
   const handlePrefetch = () => {
+    prefetchDetailModal();
     if (car) {
       const candidates = [car.primaryImage, ...(car.images || [])].filter(Boolean);
       if (candidates.length > 0) {
