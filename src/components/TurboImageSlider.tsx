@@ -389,6 +389,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     wrapTimeoutRef.current = setTimeout(() => {
       if (!trackRef.current) {
         isWrappingRef.current = false;
+        isInternalNavRef.current = false;
         return;
       }
       const t = trackRef.current;
@@ -409,6 +410,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
           trackRef.current.style.removeProperty('transition');
         }
         isWrappingRef.current = false;
+        isInternalNavRef.current = false;
       });
     }, 350);
   }, [totalImages, containerWidth, onIndexChange]);
@@ -444,6 +446,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     wrapTimeoutRef.current = setTimeout(() => {
       if (!trackRef.current) {
         isWrappingRef.current = false;
+        isInternalNavRef.current = false;
         return;
       }
       const t = trackRef.current;
@@ -465,6 +468,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
           trackRef.current.style.removeProperty('transition');
         }
         isWrappingRef.current = false;
+        isInternalNavRef.current = false;
       });
     }, 350);
   }, [totalImages, containerWidth, onIndexChange]);
@@ -573,14 +577,14 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   // Only external index changes (photo grid selection, lightbox thumbnail strip, hover preview, car switch)
   // should go through applyPositionWithoutTransition.
   useEffect(() => {
+    const isInternal = isInternalNavRef.current;
+    isInternalNavRef.current = false;
+
     if (isWrappingRef.current) return;
     const prevIndex = prevSyncedIndexRef.current;
     prevSyncedIndexRef.current = activeImageIndex;
     const wasExternalChange = currentIndexRef.current !== activeImageIndex;
     currentIndexRef.current = activeImageIndex;
-
-    const isInternal = isInternalNavRef.current;
-    isInternalNavRef.current = false;
 
     // Navigation initiated inside the slider (buttons, swipe, click zones) already positions/animates the track
     if (isInternal) {
