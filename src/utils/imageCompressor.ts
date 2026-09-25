@@ -92,9 +92,9 @@ function loadImageElement(fileOrBlobOrUrl: File | Blob | string): Promise<HTMLIm
       resolve(img);
     };
 
-    img.onerror = (err) => {
+    img.onerror = () => {
       cleanup();
-      reject(new Error(`Şəkil oxunarkən xəta baş verdi: ${err}`));
+      reject(new Error("Şəkil faylı oxuna bilmədi və ya format dəstəklənmir"));
     };
   });
 }
@@ -228,23 +228,9 @@ export async function compressImage(
     }
   }
 
-  // If compression somehow failed completely, fallback to original input
+  // If compression somehow failed completely, throw descriptive error so caller marks it failed
   if (!blob) {
-    console.warn('Image compression fallback to original');
-    const previewUrl = URL.createObjectURL(input);
-    return {
-      file: input instanceof File ? input : new File([input], origName, { type: input.type || 'image/jpeg' }),
-      blob: input,
-      previewUrl,
-      originalSize,
-      compressedSize: originalSize,
-      originalSizeFormatted: formatFileSize(originalSize),
-      compressedSizeFormatted: formatFileSize(originalSize),
-      savedPercent: 0,
-      width: origWidth || 1200,
-      height: origHeight || 900,
-      mimeType: input.type || 'image/jpeg'
-    };
+    throw new Error("Şəkli sıxmaq (WebP) mümkün olmadı");
   }
 
   // Generate clean new filename with .webp or .jpg extension

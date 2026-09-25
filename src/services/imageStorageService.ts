@@ -98,6 +98,40 @@ export async function downloadExternalImageAsBlob(
 }
 
 /**
+ * Safe helper to read Blob/File as Data URL, converting ProgressEvent / DOMException into descriptive Errors
+ */
+function readFileAsDataUrl(blobOrFile: Blob | File, filename?: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Şəkil faylının oxunması uğursuz oldu"));
+      }
+    };
+    reader.onerror = () => {
+      const domErr = reader.error;
+      const name = domErr?.name || '';
+      if (name === 'NotReadableError') {
+        reject(new Error("Bu şəkil telefonda oxuna bilmədi. Şəkli qalereyadan (məs. Google Photos) əvvəlcə cihaza endirin və yenidən seçin."));
+      } else if (name === 'NotFoundError') {
+        reject(new Error("Fayl tapılmadı və ya cihaza tam yüklənməyib."));
+      } else if (name === 'SecurityError') {
+        reject(new Error("Faylı oxumağa icazə verilmədi."));
+      } else {
+        const detail = domErr?.message || (filename ? `${filename} faylı oxuna bilmədi` : 'Fayl oxunarkən xəta baş verdi');
+        reject(new Error(detail));
+      }
+    };
+    reader.onabort = () => {
+      reject(new Error("Fayl oxunması dayandırıldı"));
+    };
+    reader.readAsDataURL(blobOrFile);
+  });
+}
+
+/**
  * Upload image (File, Blob, or base64 dataUrl) directly to Supabase Storage 'car-images' bucket
  * Includes automatic retry mechanism, extended timeout (30s), and fallback across candidate buckets
  */
@@ -120,12 +154,7 @@ export async function uploadImageToSupabaseStorage(
 
         try {
           const { blob } = await downloadExternalImageAsBlob(fileOrData);
-          dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
+          dataUrl = await readFileAsDataUrl(blob, fileName);
         } catch (downloadErr: unknown) {
           const msg = downloadErr instanceof Error ? downloadErr.message : 'Xarici şəkil linkindən endirilə bilmədi';
           return {
@@ -137,12 +166,8 @@ export async function uploadImageToSupabaseStorage(
         return { success: false, error: 'Naməlum şəkil formatı' };
       }
     } else {
-      dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(fileOrData);
-      });
+      const displayName = fileName || (fileOrData instanceof File ? fileOrData.name : undefined);
+      dataUrl = await readFileAsDataUrl(fileOrData, displayName);
     }
 
     let lastError = '';
@@ -179,7 +204,26 @@ export async function uploadImageToSupabaseStorage(
     return { success: false, error: lastError || 'Şəkil yüklənmədi' };
   } catch (err: unknown) {
     console.error('Image upload exception:', err);
-    const msg = err instanceof Error ? err.message : 'Naməlum xəta';
+    let msg: string;
+    if (err instanceof Error) {
+      msg = err.message;
+    } else if (typeof err === 'object' && err !== null) {
+      const anyErr = err as Record<string, any>;
+      if (anyErr?.name === 'NotReadableError' || anyErr?.target?.error?.name === 'NotReadableError') {
+        msg = "Bu şəkil telefonda oxuna bilmədi. Şəkli qalereyadan (məs. Google Photos) əvvəlcə cihaza endirin və yenidən seçin.";
+      } else if (anyErr?.target?.error?.message) {
+        msg = anyErr.target.error.message;
+      } else if (anyErr?.message) {
+        msg = anyErr.message;
+      } else {
+        msg = "Fayl oxunarkən və ya yüklənərkən xəta baş verdi";
+      }
+    } else {
+      msg = String(err);
+    }
+    if (!msg || msg === 'Naməlum xəta' || msg === '[object Object]' || msg === '[object ProgressEvent]') {
+      msg = "Fayl oxunarkən və ya yüklənərkən xəta baş verdi";
+    }
     return { success: false, error: `Şəkil yüklənmə xətası: ${msg}` };
   }
 }

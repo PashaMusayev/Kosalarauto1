@@ -387,18 +387,39 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       return;
     }
 
+    // Phase 56: Stop BEFORE any upload if there are failed/unreadable images
+    const failedItems = imagesList.filter(item => Boolean(item.error));
+    if (failedItems.length > 0) {
+      const failedNames = failedItems.map((item) => {
+        const name = item.fileName || item.file?.name || `Şəkil #${imagesList.indexOf(item) + 1}`;
+        return `${name} (${item.error})`;
+      }).join('\n• ');
+      const errMsg = `Yadda saxlamazdan əvvəl xətalı şəkilləri silin və ya yenidən seçin:\n• ${failedNames}`;
+      setIsSaving(false);
+      setSaveError(errMsg);
+      alert(errMsg);
+      return;
+    }
+
+    // Check if any images are still in the process of compressing
+    const compressingItems = imagesList.filter(item => item.isCompressing);
+    if (compressingItems.length > 0) {
+      alert('Şəkillər hələ sıxılma mərhələsindədir, zəhmət olmasa bir neçə saniyə gözləyin.');
+      return;
+    }
+
     setIsSaving(true);
     setSaveError(null);
 
-    const pendingBlobItems = imagesList.filter(item => (item.isBlob && item.file) || item.url.startsWith('data:'));
+    const pendingBlobItems = imagesList.filter(item => (item.isBlob && item.file && item.isCompressed) || item.url.startsWith('data:'));
     const totalPending = pendingBlobItems.length;
 
     setSaveProgress({
-      step: totalPending > 0 ? 'compressing' : 'saving_db',
+      step: totalPending > 0 ? 'uploading' : 'saving_db',
       current: 0,
       total: totalPending,
-      percentage: totalPending > 0 ? 5 : 50,
-      message: totalPending > 0 ? 'Şəkillər hazırlanır...' : 'Məlumatlar yadda saxlanılır...'
+      percentage: totalPending > 0 ? 10 : 50,
+      message: totalPending > 0 ? 'Şəkillər yüklənməyə hazırlanır...' : 'Məlumatlar yadda saxlanılır...'
     });
 
     try {
@@ -409,42 +430,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       for (let i = 0; i < imagesList.length; i++) {
         const item = imagesList[i];
         if (item.isBlob && item.file) {
-          processedIdx++;
-          let fileToUpload = item.file;
-          let fileNameToUpload = item.file.name;
-
-          // If not yet compressed, compress on the fly before upload
+          // Phase 56: Strictly upload only successfully compressed items (never upload raw uncompressed originals)
           if (!item.isCompressed) {
-            const compressPercent = Math.round(((processedIdx - 0.5) / totalPending) * 40);
-            setSaveProgress({
-              step: 'compressing',
-              current: processedIdx,
-              total: totalPending,
-              percentage: Math.max(5, compressPercent),
-              message: `Şəkil sıxılır (${processedIdx}/${totalPending}): WebP 1200px...`
-            });
-
-            try {
-              const compRes = await compressImage(item.file, item.file.name, {
-                maxWidth: 1200,
-                maxHeight: 1200,
-                quality: 0.78
-              });
-              fileToUpload = compRes.file;
-              fileNameToUpload = compRes.file.name;
-            } catch (cErr) {
-              console.warn('Compression fallback during save:', cErr);
-            }
+            throw new Error(`Şəkil sıxılmayıb və ya xətalıdır (${item.fileName || item.file.name}). Zəhmət olmasa xətalı şəkli silin və ya yenidən seçin.`);
           }
 
+          processedIdx++;
+          const fileToUpload = item.file;
+          const fileNameToUpload = item.fileName || item.file.name;
+
           // Upload compressed WebP to Supabase Storage
-          const uploadPercent = 40 + Math.round((processedIdx / totalPending) * 50);
+          const uploadPercent = 40 + Math.round((processedIdx / Math.max(1, totalPending)) * 50);
           setSaveProgress({
             step: 'uploading',
             current: processedIdx,
             total: totalPending,
             percentage: Math.min(92, uploadPercent),
-            message: `Supabase-ə yüklənir (${processedIdx}/${totalPending})...`
+            message: `Supabase-ə yüklənir (${processedIdx}/${totalPending}): ${fileNameToUpload}...`
           });
 
           const uploadRes = await uploadImageToSupabaseStorage(fileToUpload, fileNameToUpload);

@@ -11,6 +11,9 @@ export interface FormImageItem {
   isCompressing?: boolean;
   mimeType?: string;
   savedPercent?: number;
+  error?: string;
+  errorType?: 'unreadable' | 'heic' | 'general';
+  fileName?: string;
 }
 
 export interface SaveProgressState {
