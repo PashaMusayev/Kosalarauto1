@@ -249,9 +249,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
 
   // Synchronous index ref to prevent rapid-click stale state issues (Issue 3)
   const currentIndexRef = useRef(activeImageIndex);
-  useEffect(() => {
-    currentIndexRef.current = activeImageIndex;
-  }, [activeImageIndex]);
+  const isInternalNavRef = useRef(false);
 
   // States & Refs for smooth Turbo.az touch & mouse slider
   const [isDragging, setIsDragging] = useState(false);
@@ -365,11 +363,13 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     if (isWrappingRef.current || totalImages <= 1) return;
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     if (!trackRef.current || width <= 0) {
+      isInternalNavRef.current = true;
       currentIndexRef.current = 0;
       onIndexChange(0);
       return;
     }
 
+    isInternalNavRef.current = true;
     isWrappingRef.current = true;
     const track = trackRef.current;
 
@@ -398,6 +398,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       t.style.transform = 'translateX(0px)';
       void t.offsetWidth; // Force synchronous reflow
 
+      isInternalNavRef.current = true;
       currentIndexRef.current = 0;
       onIndexChange(0);
       setWrapVisualIndex(null);
@@ -417,11 +418,13 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     if (isWrappingRef.current || totalImages <= 1) return;
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     if (!trackRef.current || width <= 0) {
+      isInternalNavRef.current = true;
       currentIndexRef.current = totalImages - 1;
       onIndexChange(totalImages - 1);
       return;
     }
 
+    isInternalNavRef.current = true;
     isWrappingRef.current = true;
     const track = trackRef.current;
 
@@ -451,6 +454,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       t.style.transform = `translateX(${-targetIndex * width}px)`;
       void t.offsetWidth; // Force synchronous reflow
 
+      isInternalNavRef.current = true;
       currentIndexRef.current = targetIndex;
       onIndexChange(targetIndex);
       setWrapVisualIndex(null);
@@ -465,24 +469,39 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }, 350);
   }, [totalImages, containerWidth, onIndexChange]);
 
-  // Navigate to slide with clean boundary handling
-  const goToSlide = useCallback((newIndex: number) => {
+  // Navigate to slide with clean boundary handling and direction awareness (Phase 55)
+  const goToSlide = useCallback((newIndex: number, direction?: 'next' | 'prev') => {
     if (isWrappingRef.current) return;
-    const clampedIndex = Math.max(0, Math.min(totalImages - 1, newIndex));
     const prevIndex = currentIndexRef.current;
 
-    // Check for boundary wrap
+    // Check for boundary wrap: direction-aware
+    // - Wrap forward (wrapNext, via the trailing first-slide clone) ONLY when direction === 'next' AND current index is the last slide.
+    // - Wrap backward (wrapPrev, via the leading last-slide clone) ONLY when direction === 'prev' AND current index is the first slide.
     if (totalImages > 1) {
-      if (prevIndex === totalImages - 1 && clampedIndex === 0) {
+      if (direction === 'next' && prevIndex === totalImages - 1) {
         wrapNext();
         return;
       }
-      if (prevIndex === 0 && clampedIndex === totalImages - 1) {
+      if (direction === 'prev' && prevIndex === 0) {
         wrapPrev();
         return;
       }
+      // If direction is not specified and totalImages > 2, handle boundary wrap for non-adjacent jumps (0 <-> totalImages - 1)
+      if (!direction && totalImages > 2) {
+        if (prevIndex === totalImages - 1 && newIndex === 0) {
+          wrapNext();
+          return;
+        }
+        if (prevIndex === 0 && newIndex === totalImages - 1) {
+          wrapPrev();
+          return;
+        }
+      }
     }
 
+    const clampedIndex = Math.max(0, Math.min(totalImages - 1, newIndex));
+
+    isInternalNavRef.current = true;
     currentIndexRef.current = clampedIndex;
     onIndexChange(clampedIndex);
 
@@ -519,7 +538,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
     const current = currentIndexRef.current;
     if (current > 0) {
-      goToSlide(current - 1);
+      goToSlide(current - 1, 'prev');
     } else if (totalImages > 1) {
       wrapPrev();
     }
@@ -541,7 +560,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     }
     const current = currentIndexRef.current;
     if (current < totalImages - 1) {
-      goToSlide(current + 1);
+      goToSlide(current + 1, 'next');
     } else if (totalImages > 1) {
       wrapNext();
     }
@@ -550,7 +569,9 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
   const prevSyncedIndexRef = useRef(activeImageIndex);
 
   // Synchronize track position when activeImageIndex or containerWidth changes (when not dragging)
-  // Generalizes the jump fix to ANY jump > 1 or external prop change (grid / lightbox thumbnail clicks / hover preview)
+  // Navigation initiated inside the slider already positions/animates the track itself.
+  // Only external index changes (photo grid selection, lightbox thumbnail strip, hover preview, car switch)
+  // should go through applyPositionWithoutTransition.
   useEffect(() => {
     if (isWrappingRef.current) return;
     const prevIndex = prevSyncedIndexRef.current;
@@ -558,22 +579,28 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
     const wasExternalChange = currentIndexRef.current !== activeImageIndex;
     currentIndexRef.current = activeImageIndex;
 
+    const isInternal = isInternalNavRef.current;
+    isInternalNavRef.current = false;
+
+    // Navigation initiated inside the slider (buttons, swipe, click zones) already positions/animates the track
+    if (isInternal) {
+      return;
+    }
+
     if (isDraggingRef.current) return;
     const width = containerRef.current ? containerRef.current.clientWidth : containerWidth;
     if (!trackRef.current || width <= 0) return;
 
-    const isJump =
-      Math.abs(activeImageIndex - prevIndex) > 1 ||
-      (prevIndex === totalImages - 1 && activeImageIndex === 0) ||
-      (prevIndex === 0 && activeImageIndex === totalImages - 1) ||
-      wasExternalChange;
+    const isExternalChange = wasExternalChange || activeImageIndex !== prevIndex;
 
-    if (isJump) {
+    if (isExternalChange) {
+      // Clean non-sliding jump for external changes (photo grid selection, lightbox thumbnail strip, hover preview, car switch)
       applyPositionWithoutTransition(activeImageIndex);
     } else {
+      // Container width / resize sync
       trackRef.current.style.transform = `translateX(${-activeImageIndex * width}px)`;
     }
-  }, [activeImageIndex, containerWidth, totalImages, applyPositionWithoutTransition]);
+  }, [activeImageIndex, containerWidth, applyPositionWithoutTransition]);
 
   // On Drag Start for Slider Track
   const onDragStart = useCallback((clientX: number, clientY: number) => {
@@ -674,7 +701,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       if (diff < 0) {
         // Next slide (wrap around smoothly to first image when swiping past the last image)
         if (currentIdx < totalImages - 1) {
-          goToSlide(currentIdx + 1);
+          goToSlide(currentIdx + 1, 'next');
         } else if (totalImages > 1) {
           wrapNext();
         } else {
@@ -685,7 +712,7 @@ export const TurboImageSlider: React.FC<TurboImageSliderProps> = ({
       } else {
         // Prev slide (wrap around smoothly to last image when swiping before the first image)
         if (currentIdx > 0) {
-          goToSlide(currentIdx - 1);
+          goToSlide(currentIdx - 1, 'prev');
         } else if (totalImages > 1) {
           wrapPrev();
         } else {
