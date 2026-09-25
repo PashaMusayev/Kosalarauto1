@@ -12,7 +12,10 @@ export interface FormImageItem {
   mimeType?: string;
   savedPercent?: number;
   error?: string;
-  errorType?: 'unreadable' | 'heic' | 'general';
+  errorType?: 'unreadable' | 'heic' | 'general' | 'format' | 'size';
+  technicalError?: string;
+  notice?: string;
+  isFallbackOriginal?: boolean;
   fileName?: string;
 }
 

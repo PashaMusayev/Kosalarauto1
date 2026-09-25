@@ -225,6 +225,13 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                             <RefreshCw className="w-2.5 h-2.5 animate-spin" />
                             <span>Sıxılır...</span>
                           </span>
+                        ) : item.isFallbackOriginal ? (
+                          <span 
+                            className="absolute bottom-1.5 left-1.5 bg-amber-950/95 border border-amber-500/60 text-amber-300 text-[9px] font-bold px-1.5 py-0.5 rounded shadow flex items-center gap-0.5"
+                            title={`Orijinal formatda saxlanıldı (${formatFileSize(item.compressedSize || item.originalSize || 0)})`}
+                          >
+                            <span>Orijinal • {formatFileSize(item.compressedSize || item.originalSize || 0)}</span>
+                          </span>
                         ) : item.compressedSize ? (
                           <span 
                             className="absolute bottom-1.5 left-1.5 bg-emerald-950/95 border border-emerald-500/60 text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded shadow flex items-center gap-0.5"

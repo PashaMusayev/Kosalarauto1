@@ -9,12 +9,19 @@
  * - Delivers instantaneous slide transitions and mobile performance
  */
 
+import { 
+  detectImageFormatFromBuffer, 
+  getImageDimensionsFromHeader, 
+  ImageFormatInfo 
+} from './imageFormatDetector';
+
 export interface CompressionOptions {
   maxWidth?: number;
   maxHeight?: number;
   quality?: number; // 0.0 to 1.0 (default: 0.78)
   preferredMimeType?: 'image/webp' | 'image/jpeg';
   maxSizeBytes?: number; // default: 480KB
+  formatInfo?: ImageFormatInfo;
 }
 
 export interface CompressionResult {
@@ -64,7 +71,41 @@ export function isWebpSupported(): boolean {
 }
 
 /**
- * Loads an image from a File, Blob, or Data URL safely
+ * Feature detection for createImageBitmap with resize options
+ */
+let hasCreateImageBitmapResizeSupport: boolean | null = null;
+async function supportsCreateImageBitmapResize(): Promise<boolean> {
+  if (hasCreateImageBitmapResizeSupport !== null) return hasCreateImageBitmapResizeSupport;
+  if (typeof createImageBitmap !== 'function') {
+    hasCreateImageBitmapResizeSupport = false;
+    return false;
+  }
+  try {
+    // 1x1 transparent PNG
+    const testBlob = new Blob([
+      new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+        0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+        0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82
+      ])
+    ], { type: 'image/png' });
+
+    const bmp = await (createImageBitmap as any)(testBlob, { resizeWidth: 2, resizeHeight: 2, resizeQuality: 'high' });
+    const supported = bmp.width === 2;
+    bmp.close();
+    hasCreateImageBitmapResizeSupport = supported;
+    return supported;
+  } catch (e) {
+    hasCreateImageBitmapResizeSupport = false;
+    return false;
+  }
+}
+
+/**
+ * Loads an image from a File, Blob, or Data URL safely via HTMLImageElement
  */
 function loadImageElement(fileOrBlobOrUrl: File | Blob | string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -94,16 +135,130 @@ function loadImageElement(fileOrBlobOrUrl: File | Blob | string): Promise<HTMLIm
 
     img.onerror = () => {
       cleanup();
-      reject(new Error("Şəkil faylı oxuna bilmədi və ya format dəstəklənmir"));
+      reject(new Error("Şəkil faylı deşifrə edilə bilmədi və ya format dəstəklənmir"));
     };
   });
+}
+
+export interface DecodedImageSource {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  close?: () => void;
+}
+
+/**
+ * Layered decoding pipeline with fallbacks:
+ * a. createImageBitmap with resizeWidth/resizeHeight (memory efficient for 108MP+)
+ * b. createImageBitmap without options
+ * c. HTMLImageElement via object URL (native browser decoder)
+ * d. HEIC/HEIF fallback via dynamically imported heic2any inside admin
+ */
+export async function decodeImageWithFallbacks(
+  blob: Blob,
+  formatInfo?: ImageFormatInfo,
+  maxW = 1200,
+  maxH = 1200
+): Promise<DecodedImageSource> {
+  let lastError: Error | null = null;
+
+  // Step a: createImageBitmap with resize options
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const canResize = await supportsCreateImageBitmapResize();
+      if (canResize) {
+        const slice = blob.slice(0, 4096);
+        const headerBytes = new Uint8Array(await slice.arrayBuffer());
+        const dims = getImageDimensionsFromHeader(headerBytes);
+        if (dims && dims.width > 0 && dims.height > 0) {
+          const target = calculateTargetDimensions(dims.width, dims.height, maxW, maxH);
+          const bmp = await (createImageBitmap as any)(blob, {
+            resizeWidth: target.width,
+            resizeHeight: target.height,
+            resizeQuality: 'high'
+          });
+          return {
+            source: bmp,
+            width: bmp.width,
+            height: bmp.height,
+            close: () => bmp.close()
+          };
+        }
+      }
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+
+    // Step b: createImageBitmap without options
+    try {
+      const bmp = await createImageBitmap(blob);
+      return {
+        source: bmp,
+        width: bmp.width,
+        height: bmp.height,
+        close: () => bmp.close()
+      };
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  // Step c: HTMLImageElement from object URL (handles JPEG, PNG, WebP, GIF, and iPhone Safari native HEIC)
+  try {
+    const img = await loadImageElement(blob);
+    return {
+      source: img,
+      width: img.naturalWidth || img.width,
+      height: img.naturalHeight || img.height
+    };
+  } catch (err: unknown) {
+    lastError = err instanceof Error ? err : new Error(String(err));
+  }
+
+  // Step d: HEIC/HEIF fallback via dynamic heic2any import
+  if (formatInfo?.isHeic) {
+    try {
+      const heic2anyModule = await import('heic2any');
+      const heic2any = (heic2anyModule as any).default || heic2anyModule;
+      const converted = await heic2any({
+        blob,
+        toType: 'image/jpeg',
+        quality: 0.85
+      });
+      const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
+
+      // Decode converted JPEG
+      if (typeof createImageBitmap === 'function') {
+        try {
+          const bmp = await createImageBitmap(jpegBlob);
+          return {
+            source: bmp,
+            width: bmp.width,
+            height: bmp.height,
+            close: () => bmp.close()
+          };
+        } catch (e) {}
+      }
+      const img = await loadImageElement(jpegBlob);
+      return {
+        source: img,
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height
+      };
+    } catch (heicErr: unknown) {
+      const hMsg = heicErr instanceof Error ? heicErr.message : String(heicErr);
+      throw new Error(`HEIC formatı çevrilə bilmədi: ${hMsg}`);
+    }
+  }
+
+  throw lastError || new Error("Şəkil faylı deşifrə edilə bilmədi");
 }
 
 /**
  * Calculate scaled dimensions fitting within maxWidth and maxHeight,
  * maintaining the exact aspect ratio without upscaling.
  */
-function calculateTargetDimensions(
+export function calculateTargetDimensions(
   origW: number,
   origH: number,
   maxW: number,
@@ -126,10 +281,10 @@ function calculateTargetDimensions(
 }
 
 /**
- * Renders an image to a canvas with high-quality smoothing and returns a Blob
+ * Renders an image source to a canvas with high-quality smoothing and returns a Blob
  */
 function renderCanvasToBlob(
-  img: HTMLImageElement,
+  source: CanvasImageSource,
   width: number,
   height: number,
   mimeType: string,
@@ -155,7 +310,7 @@ function renderCanvasToBlob(
       ctx.fillRect(0, 0, width, height);
 
       // Draw the image
-      ctx.drawImage(img, 0, 0, width, height);
+      ctx.drawImage(source, 0, 0, width, height);
 
       canvas.toBlob(
         (blob) => resolve(blob),
@@ -172,6 +327,7 @@ function renderCanvasToBlob(
 /**
  * Compresses an image File or Blob to WebP (or JPEG fallback)
  * with max dimensions of 1200px and optimal quality (75-80%).
+ * Uses layered decode fallbacks (createImageBitmap, HTMLImageElement, heic2any).
  */
 export async function compressImage(
   input: File | Blob,
@@ -186,81 +342,107 @@ export async function compressImage(
   const originalSize = input.size;
   const origName = fileName || (input as File).name || `photo_${Date.now()}`;
 
+  // Determine format info
+  let formatInfo = options.formatInfo;
+  if (!formatInfo) {
+    try {
+      const slice = input.slice(0, 64);
+      const headerBytes = new Uint8Array(await slice.arrayBuffer());
+      formatInfo = detectImageFormatFromBuffer(headerBytes);
+      if (
+        !formatInfo.isHeic &&
+        (origName.toLowerCase().endsWith('.heic') ||
+         origName.toLowerCase().endsWith('.heif') ||
+         (input.type && input.type.toLowerCase().includes('heic')))
+      ) {
+        formatInfo.isHeic = true;
+        formatInfo.format = 'heic';
+      }
+    } catch (e) {
+      // Fallback
+    }
+  }
+
   // Determine MIME type (prefer WebP)
   const canUseWebp = isWebpSupported() && options.preferredMimeType !== 'image/jpeg';
   const targetMime = canUseWebp ? 'image/webp' : 'image/jpeg';
   const targetExt = canUseWebp ? 'webp' : 'jpg';
 
-  // Load image
-  const img = await loadImageElement(input);
-  const { width: origWidth, height: origHeight } = img;
+  // Decode image via layered fallbacks
+  const decoded = await decodeImageWithFallbacks(input, formatInfo, maxW, maxH);
+  const { width: origWidth, height: origHeight } = decoded;
 
-  // Pass 1: Scale to target dimensions (max 1200px)
-  let { width: targetWidth, height: targetHeight } = calculateTargetDimensions(
-    origWidth,
-    origHeight,
-    maxW,
-    maxH
-  );
-
-  let blob = await renderCanvasToBlob(img, targetWidth, targetHeight, targetMime, quality);
-
-  // Fallback to JPEG if WebP was not generated
-  if (!blob && targetMime === 'image/webp') {
-    blob = await renderCanvasToBlob(img, targetWidth, targetHeight, 'image/jpeg', quality);
-  }
-
-  // Pass 2: If still exceeds targetMaxBytes (e.g., heavily detailed image), reduce quality slightly
-  if (blob && blob.size > targetMaxBytes) {
-    const reducedQuality = Math.max(0.68, quality - 0.1);
-    const reducedDims = calculateTargetDimensions(origWidth, origHeight, Math.min(1080, maxW), Math.min(1080, maxH));
-    const pass2Blob = await renderCanvasToBlob(
-      img,
-      reducedDims.width,
-      reducedDims.height,
-      blob.type || targetMime,
-      reducedQuality
+  try {
+    // Pass 1: Scale to target dimensions (max 1200px)
+    let { width: targetWidth, height: targetHeight } = calculateTargetDimensions(
+      origWidth,
+      origHeight,
+      maxW,
+      maxH
     );
-    if (pass2Blob && pass2Blob.size < blob.size) {
-      blob = pass2Blob;
-      targetWidth = reducedDims.width;
-      targetHeight = reducedDims.height;
+
+    let blob = await renderCanvasToBlob(decoded.source, targetWidth, targetHeight, targetMime, quality);
+
+    // Fallback to JPEG if WebP was not generated
+    if (!blob && targetMime === 'image/webp') {
+      blob = await renderCanvasToBlob(decoded.source, targetWidth, targetHeight, 'image/jpeg', quality);
     }
+
+    // Pass 2: If still exceeds targetMaxBytes (e.g., heavily detailed image), reduce quality slightly
+    if (blob && blob.size > targetMaxBytes) {
+      const reducedQuality = Math.max(0.68, quality - 0.1);
+      const reducedDims = calculateTargetDimensions(origWidth, origHeight, Math.min(1080, maxW), Math.min(1080, maxH));
+      const pass2Blob = await renderCanvasToBlob(
+        decoded.source,
+        reducedDims.width,
+        reducedDims.height,
+        blob.type || targetMime,
+        reducedQuality
+      );
+      if (pass2Blob && pass2Blob.size < blob.size) {
+        blob = pass2Blob;
+        targetWidth = reducedDims.width;
+        targetHeight = reducedDims.height;
+      }
+    }
+
+    // If compression failed completely, throw descriptive error so caller marks it failed or uses final fallback
+    if (!blob) {
+      throw new Error("Şəkli sıxmaq (WebP/JPEG) mümkün olmadı");
+    }
+
+    // Generate clean new filename with .webp or .jpg extension
+    const baseName = origName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const finalFileName = `${baseName}.${targetExt}`;
+
+    const compressedFile = new File([blob], finalFileName, {
+      type: blob.type || targetMime,
+      lastModified: Date.now()
+    });
+
+    const previewUrl = URL.createObjectURL(blob);
+    const compressedSize = blob.size;
+    const savedPercent = originalSize > 0 
+      ? Math.max(0, Math.round(((originalSize - compressedSize) / originalSize) * 100))
+      : 0;
+
+    return {
+      file: compressedFile,
+      blob,
+      previewUrl,
+      originalSize,
+      compressedSize,
+      originalSizeFormatted: formatFileSize(originalSize),
+      compressedSizeFormatted: formatFileSize(compressedSize),
+      savedPercent,
+      width: targetWidth,
+      height: targetHeight,
+      mimeType: blob.type || targetMime
+    };
+  } finally {
+    // Release bitmap / image memory
+    decoded.close?.();
   }
-
-  // If compression somehow failed completely, throw descriptive error so caller marks it failed
-  if (!blob) {
-    throw new Error("Şəkli sıxmaq (WebP) mümkün olmadı");
-  }
-
-  // Generate clean new filename with .webp or .jpg extension
-  const baseName = origName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const finalFileName = `${baseName}.${targetExt}`;
-
-  const compressedFile = new File([blob], finalFileName, {
-    type: blob.type || targetMime,
-    lastModified: Date.now()
-  });
-
-  const previewUrl = URL.createObjectURL(blob);
-  const compressedSize = blob.size;
-  const savedPercent = originalSize > 0 
-    ? Math.max(0, Math.round(((originalSize - compressedSize) / originalSize) * 100))
-    : 0;
-
-  return {
-    file: compressedFile,
-    blob,
-    previewUrl,
-    originalSize,
-    compressedSize,
-    originalSizeFormatted: formatFileSize(originalSize),
-    compressedSizeFormatted: formatFileSize(compressedSize),
-    savedPercent,
-    width: targetWidth,
-    height: targetHeight,
-    mimeType: blob.type || targetMime
-  };
 }
 
 /**

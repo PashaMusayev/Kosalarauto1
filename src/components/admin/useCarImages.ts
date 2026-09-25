@@ -7,9 +7,12 @@ import {
   uploadThumbnailForImage 
 } from '../../services/imageStorageService';
 import { compressImage } from '../../utils/imageCompressor';
+import { detectImageFormatFromBuffer } from '../../utils/imageFormatDetector';
 
 export const MSG_UNREADABLE_FILE = "Bu şəkil telefonda oxuna bilmədi. Şəkli qalereyadan (məs. Google Photos) əvvəlcə cihaza endirin və yenidən seçin.";
-export const MSG_HEIC_NOT_SUPPORTED = "HEIC formatı dəstəklənmir. Şəkli JPEG kimi saxlayın və ya kamera ayarlarında 'Ən uyğun (JPEG)' formatı seçin.";
+export const MSG_HEIC_FAILED = "HEIC formatı çevrilə bilmədi. Şəkli JPEG kimi saxlayın və ya kamera ayarlarında 'Ən uyğun (JPEG)' formatı seçin.";
+export const MSG_HEIC_NOT_SUPPORTED = MSG_HEIC_FAILED;
+export const MSG_CORRUPTED_FILE = "Bu şəkil formatı deşifrə edilə bilmədi və ya fayl zədələnib.";
 
 export function isHeicFile(file: File | { name?: string; type?: string }): boolean {
   const name = (file.name || '').toLowerCase();
@@ -194,31 +197,70 @@ export function useCarImages(showToast: (msg: string) => void) {
     if (!files || files.length === 0) return;
 
     const filesArray = Array.from(files);
+
+    // CRITICAL: Read ALL selected files' bytes IMMEDIATELY in parallel BEFORE clearing e.target.value!
+    // On mobile (Android Chrome, Samsung Internet), picked files are content-provider handles whose read access
+    // can lapse immediately once the input value is cleared. Reading into in-memory ArrayBuffers first guarantees
+    // reliable file contents in RAM.
+    const readResults = await Promise.allSettled(
+      filesArray.map(async (file) => {
+        const buffer = await file.arrayBuffer();
+        if (!buffer || buffer.byteLength === 0) {
+          throw new Error("Empty or unreadable file");
+        }
+        return {
+          buffer,
+          size: file.size,
+          name: file.name,
+          type: file.type
+        };
+      })
+    );
+
+    // ONLY clear the file input after all bytes are safely read into memory:
     e.target.value = '';
 
     // Create immediate placeholder items for fast UI preview
     const newItems: FormImageItem[] = filesArray.map((file, i) => {
-      const isHeic = isHeicFile(file);
+      const readRes = readResults[i];
+      const isReadOk = readRes.status === 'fulfilled';
+      const buffer = isReadOk ? readRes.value.buffer : null;
+      const formatInfo = buffer ? detectImageFormatFromBuffer(buffer) : null;
+      const isHeic = formatInfo ? formatInfo.isHeic : isHeicFile(file);
+
       let blobUrl = '';
-      if (!isHeic) {
+      if (isReadOk && buffer && !isHeic) {
         try {
-          blobUrl = URL.createObjectURL(file);
-        } catch (e) {
+          const blob = new Blob([buffer], { type: formatInfo?.mimeType || file.type || 'image/jpeg' });
+          blobUrl = URL.createObjectURL(blob);
+        } catch (err) {
           blobUrl = '';
         }
+      }
+
+      if (!isReadOk) {
+        // True unreadable file error (the ONLY case that triggers the Google Photos / download-to-device message)
+        return {
+          id: `blob-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
+          url: '',
+          fileName: file.name,
+          isBlob: true,
+          originalSize: file.size,
+          isCompressing: false,
+          isCompressed: false,
+          error: MSG_UNREADABLE_FILE,
+          errorType: 'unreadable'
+        };
       }
 
       return {
         id: `blob-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
         url: blobUrl,
-        file: isHeic ? undefined : file,
         fileName: file.name,
         isBlob: true,
         originalSize: file.size,
-        isCompressing: !isHeic,
-        isCompressed: false,
-        error: isHeic ? MSG_HEIC_NOT_SUPPORTED : undefined,
-        errorType: isHeic ? 'heic' : undefined
+        isCompressing: true,
+        isCompressed: false
       };
     });
 
@@ -236,36 +278,31 @@ export function useCarImages(showToast: (msg: string) => void) {
     let failedCount = 0;
     let successCount = 0;
 
-    // Asynchronously and sequentially verify readability and compress each file in background
+    // Process and compress each file sequentially from in-memory buffers
     for (let i = 0; i < newItems.length; i++) {
       const currentItem = newItems[i];
       const origFile = filesArray[i];
+      const readRes = readResults[i];
 
-      // If already flagged (e.g. HEIC), count as failed and proceed
-      if (currentItem.error) {
+      // If file couldn't be read from the start, count as failed and proceed
+      if (readRes.status !== 'fulfilled' || currentItem.error) {
         failedCount++;
         continue;
       }
 
+      const buffer = readRes.value.buffer;
+      const formatInfo = detectImageFormatFromBuffer(buffer);
+      const inMemoryBlob = new Blob([buffer], { type: formatInfo.mimeType || origFile.type || 'image/jpeg' });
+
       try {
-        // 1. Read bytes immediately into memory to verify readability and detach from device storage
-        // (throws NotReadableError if Android cloud photo reference or permission lapsed)
-        const buffer = await origFile.arrayBuffer();
-        if (!buffer || buffer.byteLength === 0) {
-          throw new Error(MSG_UNREADABLE_FILE);
-        }
-
-        // 2. Wrap in an in-memory Blob with verified bytes
-        const inMemoryBlob = new Blob([buffer], { type: origFile.type || 'image/jpeg' });
-
-        // 3. Compress in-memory blob into WebP
         const compressed = await compressImage(inMemoryBlob, origFile.name, {
           maxWidth: 1200,
           maxHeight: 1200,
-          quality: 0.78
+          quality: 0.78,
+          formatInfo
         });
 
-        // Revoke the temporary raw blob URL
+        // Revoke temporary raw blob URL if it was created
         if (currentItem.url && currentItem.url.startsWith('blob:')) {
           try {
             URL.revokeObjectURL(currentItem.url);
@@ -279,7 +316,7 @@ export function useCarImages(showToast: (msg: string) => void) {
               return {
                 ...p,
                 url: compressed.previewUrl,
-                file: compressed.file, // holds ONLY the compressed in-memory File
+                file: compressed.file, // Holds ONLY the compressed in-memory File
                 fileName: compressed.file.name,
                 originalSize: origFile.size,
                 compressedSize: compressed.compressedSize,
@@ -287,6 +324,8 @@ export function useCarImages(showToast: (msg: string) => void) {
                 mimeType: compressed.mimeType,
                 isCompressed: true,
                 isCompressing: false,
+                isFallbackOriginal: false,
+                notice: undefined,
                 error: undefined,
                 errorType: undefined
               };
@@ -294,7 +333,6 @@ export function useCarImages(showToast: (msg: string) => void) {
             return p;
           });
 
-          // Ensure primaryImage is updated if not yet set
           if (!primaryImage) {
             const firstValid = mapped.find(it => !it.error && it.url);
             if (firstValid) setPrimaryImage(firstValid.url);
@@ -302,47 +340,80 @@ export function useCarImages(showToast: (msg: string) => void) {
           return mapped;
         });
       } catch (cErr: unknown) {
-        console.error('Image read/compress failure on select for file:', origFile.name, cErr);
-        failedCount++;
+        console.error('Image compress failed for file:', origFile.name, cErr);
 
-        let errorMsg = MSG_UNREADABLE_FILE;
-        let errorType: 'heic' | 'unreadable' | 'general' = 'unreadable';
-
-        const errObj = cErr as Record<string, any>;
-        const errName = errObj?.name || '';
-        const errMsgStr = String(errObj?.message || '');
-
-        if (isHeicFile(origFile)) {
-          errorMsg = MSG_HEIC_NOT_SUPPORTED;
-          errorType = 'heic';
-        } else if (
-          errName === 'NotReadableError' ||
-          errName === 'NotFoundError' ||
-          errName === 'SecurityError' ||
-          errMsgStr.includes('NotReadable') ||
-          errMsgStr.includes('oxun') ||
-          errMsgStr.includes('deşifrə')
-        ) {
-          errorMsg = MSG_UNREADABLE_FILE;
-          errorType = 'unreadable';
-        } else if (cErr instanceof Error && cErr.message && !cErr.message.includes('Naməlum')) {
-          errorMsg = cErr.message;
-          errorType = 'general';
-        }
-
-        // Revoke temporary raw blob URL
+        // Revoke temporary raw blob URL if any
         if (currentItem.url && currentItem.url.startsWith('blob:')) {
           try {
             URL.revokeObjectURL(currentItem.url);
           } catch (err) {}
         }
 
+        // LAYERED FALLBACK:
+        // If compression/canvas failed (e.g. canvas memory allocation limit on 108MP camera image or browser canvas bug),
+        // but the file bytes are confirmed valid directly uploadable format (JPEG, PNG, WebP, GIF),
+        // fall back to uploading the in-memory Blob directly! Never block an admin from uploading a readable photo!
+        if (formatInfo.isDirectlyUploadable) {
+          console.warn(`Applying layered fallback for ${origFile.name}: uploading in-memory ${formatInfo.format} directly.`);
+          const fallbackFile = new File([inMemoryBlob], origFile.name, {
+            type: formatInfo.mimeType,
+            lastModified: Date.now()
+          });
+          const previewUrl = URL.createObjectURL(inMemoryBlob);
+
+          successCount++;
+          setImagesList(prev => {
+            const mapped = prev.map(p => {
+              if (p.id === currentItem.id) {
+                return {
+                  ...p,
+                  url: previewUrl,
+                  file: fallbackFile,
+                  fileName: origFile.name,
+                  originalSize: inMemoryBlob.size,
+                  compressedSize: inMemoryBlob.size,
+                  savedPercent: 0,
+                  mimeType: formatInfo.mimeType,
+                  isCompressed: true, // Marked as ready so AdminModal save loop proceeds
+                  isCompressing: false,
+                  isFallbackOriginal: true,
+                  notice: "Orijinal formatda saxlanıldı",
+                  error: undefined,
+                  errorType: undefined
+                };
+              }
+              return p;
+            });
+
+            if (!primaryImage) {
+              const firstValid = mapped.find(it => !it.error && it.url);
+              if (firstValid) setPrimaryImage(firstValid.url);
+            }
+            return mapped;
+          });
+          continue;
+        }
+
+        // If it cannot be uploaded directly (e.g. HEIC conversion failed, corrupted format):
+        failedCount++;
+
+        let errorMsg = MSG_CORRUPTED_FILE;
+        let errorType: 'heic' | 'unreadable' | 'format' | 'general' = 'format';
+
+        if (formatInfo.isHeic || isHeicFile(origFile)) {
+          errorMsg = MSG_HEIC_FAILED;
+          errorType = 'heic';
+        } else if (cErr instanceof Error && cErr.message && !cErr.message.includes('Naməlum')) {
+          errorMsg = cErr.message;
+          errorType = 'general';
+        }
+
         setImagesList(prev => prev.map(p => {
           if (p.id === currentItem.id) {
             return {
               ...p,
-              url: '', // Clear blob URL so broken image doesn't display
-              file: undefined, // Drop raw File completely so save never attempts to upload it
+              url: '', // Clear URL so broken image doesn't display
+              file: undefined, // Drop file completely so save loop won't upload it
               fileName: origFile.name,
               isCompressing: false,
               isCompressed: false,
@@ -358,12 +429,12 @@ export function useCarImages(showToast: (msg: string) => void) {
     // Inform admin via toast about results at selection time
     if (failedCount > 0) {
       if (failedCount === 1) {
-        showToast('Diqqət: 1 şəkil oxuna bilmədi və ya dəstəklənmir. Zəhmət olmasa xətalı şəkli silin və ya yenidən seçin.');
+        showToast('Diqqət: 1 şəkil emal edilə bilmədi. Zəhmət olmasa xətalı şəkli silin və ya yenidən seçin.');
       } else {
-        showToast(`Diqqət: ${failedCount} ədəd şəkil oxuna bilmədi və ya dəstəklənmir. Zəhmət olmasa xətalı şəkilləri silin və ya yenidən seçin.`);
+        showToast(`Diqqət: ${failedCount} ədəd şəkil emal edilə bilmədi. Zəhmət olmasa xətalı şəkilləri silin və ya yenidən seçin.`);
       }
     } else if (successCount > 0) {
-      showToast(`${successCount} ədəd şəkil uğurla sıxıldı və hazırlandı.`);
+      showToast(`${successCount} ədəd şəkil uğurla hazırlandı.`);
     }
   }, [primaryImage, showToast]);
 
