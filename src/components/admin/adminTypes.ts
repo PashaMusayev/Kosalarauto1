@@ -13,6 +13,7 @@ export interface FormImageItem {
   savedPercent?: number;
   error?: string;
   errorType?: 'unreadable' | 'heic' | 'general' | 'format' | 'size';
+  errorDetail?: string;
   technicalError?: string;
   notice?: string;
   isFallbackOriginal?: boolean;

@@ -175,7 +175,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                       ? 'ring-2 ring-blue-400 border-blue-400 scale-105 bg-blue-950/70 shadow-lg shadow-blue-500/30 z-20'
                       : ''
                 }`}
-                title={hasError ? item.error : "Şəklin sırasını dəyişmək üçün sürükləyin və ya aşağıdakı ox düymələrini basın"}
+                title={hasError ? `${item.error}${item.errorDetail ? `\n${item.errorDetail}` : ''}` : "Şəklin sırasını dəyişmək üçün sürükləyin və ya aşağıdakı ox düymələrini basın"}
               >
                 {/* Image Thumbnail Container or Error State Container */}
                 {hasError ? (
@@ -184,9 +184,14 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                     <span className="text-[11px] font-bold text-rose-200 line-clamp-1 break-all px-1">
                       {item.fileName || item.file?.name || `Şəkil #${i + 1}`}
                     </span>
-                    <p className="text-[10px] text-rose-300/90 leading-tight mt-1 line-clamp-3 px-1 font-medium">
+                    <p className="text-[10px] text-rose-300/90 leading-tight mt-1 line-clamp-2 px-1 font-medium">
                       {item.error}
                     </p>
+                    {item.errorDetail && (
+                      <span className="text-[10px] font-mono text-rose-400/80 leading-tight mt-1 line-clamp-1 px-1 break-all select-all">
+                        {item.errorDetail}
+                      </span>
+                    )}
 
                     {/* Sequence Badge */}
                     <span className="absolute top-1.5 left-1.5 bg-rose-950/90 text-rose-200 text-[10px] font-black px-1.5 py-0.5 rounded shadow-sm border border-rose-800">

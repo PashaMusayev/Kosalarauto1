@@ -14,6 +14,36 @@ export const MSG_HEIC_FAILED = "HEIC formatı çevrilə bilmədi. Şəkli JPEG k
 export const MSG_HEIC_NOT_SUPPORTED = MSG_HEIC_FAILED;
 export const MSG_CORRUPTED_FILE = "Bu şəkil formatı deşifrə edilə bilmədi və ya fayl zədələnib.";
 
+/**
+ * Maximum allowed file size for direct/original upload fallback (15MB).
+ * Must strictly match the server's upload endpoint payload limit in server.ts (POST /api/upload-image).
+ */
+export const MAX_ORIGINAL_FALLBACK_BYTES = 15 * 1024 * 1024; // 15MB
+
+/**
+ * Formats technical diagnostic string (max ~80 chars):
+ * Error name, truncated message, and detected format from magic-byte detector.
+ * E.g. "NotReadableError · format: jpeg" or "EncodingError: ... · format: heic"
+ */
+export function formatErrorDetail(err: unknown, format: string): string {
+  const errObj = err as Record<string, any>;
+  const errName = errObj?.name || (err instanceof Error ? err.name : 'Error');
+  const rawMsg = String(errObj?.message || (typeof err === 'string' ? err : ''));
+
+  let msgPart = '';
+  if (rawMsg && rawMsg !== errName && rawMsg !== 'Empty or unreadable file') {
+    const cleanMsg = rawMsg.replace(/\s+/g, ' ').trim();
+    if (cleanMsg.length > 40) {
+      msgPart = `: ${cleanMsg.slice(0, 37)}...`;
+    } else {
+      msgPart = `: ${cleanMsg}`;
+    }
+  }
+
+  const detail = `${errName}${msgPart} · format: ${format}`;
+  return detail.length > 80 ? detail.slice(0, 77) + '...' : detail;
+}
+
 export function isHeicFile(file: File | { name?: string; type?: string }): boolean {
   const name = (file.name || '').toLowerCase();
   const type = (file.type || '').toLowerCase();
@@ -240,6 +270,10 @@ export function useCarImages(showToast: (msg: string) => void) {
 
       if (!isReadOk) {
         // True unreadable file error (the ONLY case that triggers the Google Photos / download-to-device message)
+        const reason = readRes.status === 'rejected' ? readRes.reason : null;
+        const fallbackFormat = file.type ? file.type.replace(/^image\//, '') : (file.name.split('.').pop() || 'unknown').toLowerCase();
+        const errorDetail = formatErrorDetail(reason, fallbackFormat);
+
         return {
           id: `blob-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
           url: '',
@@ -249,7 +283,8 @@ export function useCarImages(showToast: (msg: string) => void) {
           isCompressing: false,
           isCompressed: false,
           error: MSG_UNREADABLE_FILE,
-          errorType: 'unreadable'
+          errorType: 'unreadable',
+          errorDetail
         };
       }
 
@@ -354,6 +389,32 @@ export function useCarImages(showToast: (msg: string) => void) {
         // but the file bytes are confirmed valid directly uploadable format (JPEG, PNG, WebP, GIF),
         // fall back to uploading the in-memory Blob directly! Never block an admin from uploading a readable photo!
         if (formatInfo.isDirectlyUploadable) {
+          // Check size limit for original-bytes fallback (server rejects decoded uploads > 15MB)
+          if (inMemoryBlob.size > MAX_ORIGINAL_FALLBACK_BYTES) {
+            failedCount++;
+            const sizeMb = (inMemoryBlob.size / (1024 * 1024)).toFixed(1);
+            const errorMsg = `Şəkil çox böyükdür (${sizeMb} MB). Maksimum 15 MB. Şəkli kiçildin və ya ekran görüntüsü (screenshot) kimi yükləyin.`;
+            const errorDetail = `FileSizeError: ${sizeMb}MB > 15MB · format: ${formatInfo.format}`;
+
+            setImagesList(prev => prev.map(p => {
+              if (p.id === currentItem.id) {
+                return {
+                  ...p,
+                  url: '',
+                  file: undefined,
+                  fileName: origFile.name,
+                  isCompressing: false,
+                  isCompressed: false,
+                  error: errorMsg,
+                  errorType: 'size',
+                  errorDetail
+                };
+              }
+              return p;
+            }));
+            continue;
+          }
+
           console.warn(`Applying layered fallback for ${origFile.name}: uploading in-memory ${formatInfo.format} directly.`);
           const fallbackFile = new File([inMemoryBlob], origFile.name, {
             type: formatInfo.mimeType,
@@ -379,7 +440,8 @@ export function useCarImages(showToast: (msg: string) => void) {
                   isFallbackOriginal: true,
                   notice: "Orijinal formatda saxlanıldı",
                   error: undefined,
-                  errorType: undefined
+                  errorType: undefined,
+                  errorDetail: undefined
                 };
               }
               return p;
@@ -408,6 +470,8 @@ export function useCarImages(showToast: (msg: string) => void) {
           errorType = 'general';
         }
 
+        const errorDetail = formatErrorDetail(cErr, formatInfo.format);
+
         setImagesList(prev => prev.map(p => {
           if (p.id === currentItem.id) {
             return {
@@ -418,7 +482,8 @@ export function useCarImages(showToast: (msg: string) => void) {
               isCompressing: false,
               isCompressed: false,
               error: errorMsg,
-              errorType
+              errorType,
+              errorDetail
             };
           }
           return p;
