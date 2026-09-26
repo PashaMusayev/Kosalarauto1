@@ -93,7 +93,12 @@ async function supportsCreateImageBitmapResize(): Promise<boolean> {
       ])
     ], { type: 'image/png' });
 
-    const bmp = await (createImageBitmap as any)(testBlob, { resizeWidth: 2, resizeHeight: 2, resizeQuality: 'high' });
+    const bmp = await (createImageBitmap as any)(testBlob, { 
+      resizeWidth: 2, 
+      resizeHeight: 2, 
+      resizeQuality: 'high',
+      imageOrientation: 'from-image'
+    });
     const supported = bmp.width === 2;
     bmp.close();
     hasCreateImageBitmapResizeSupport = supported;
@@ -167,7 +172,8 @@ export async function decodeImageWithFallbacks(
     try {
       const canResize = await supportsCreateImageBitmapResize();
       if (canResize) {
-        const slice = blob.slice(0, 4096);
+        // Read up to 128KB header slice to cover large APP1 segments with embedded thumbnails
+        const slice = blob.slice(0, 131072);
         const headerBytes = new Uint8Array(await slice.arrayBuffer());
         const dims = getImageDimensionsFromHeader(headerBytes);
         if (dims && dims.width > 0 && dims.height > 0) {
@@ -175,23 +181,42 @@ export async function decodeImageWithFallbacks(
           const bmp = await (createImageBitmap as any)(blob, {
             resizeWidth: target.width,
             resizeHeight: target.height,
-            resizeQuality: 'high'
+            resizeQuality: 'high',
+            imageOrientation: 'from-image'
           });
-          return {
-            source: bmp,
-            width: bmp.width,
-            height: bmp.height,
-            close: () => bmp.close()
-          };
+
+          // Safety check (defense in depth):
+          // Compare actual bitmap aspect ratio (width/height) to the expected aspect ratio of the oriented source.
+          // If they differ by more than ~2%, discard that bitmap and fall back to the next decode path.
+          const expectedAspect = dims.width / dims.height;
+          const actualAspect = bmp.width / bmp.height;
+          const aspectDiff = Math.abs(actualAspect - expectedAspect) / expectedAspect;
+
+          if (aspectDiff > 0.02) {
+            console.warn(
+              `createImageBitmap resize produced distorted aspect ratio (${actualAspect.toFixed(3)} vs expected ${expectedAspect.toFixed(3)}). Discarding and falling back to natural decode.`
+            );
+            bmp.close();
+            // Fall through to Step b
+          } else {
+            return {
+              source: bmp,
+              width: bmp.width,
+              height: bmp.height,
+              close: () => bmp.close()
+            };
+          }
         }
       }
     } catch (err: unknown) {
       lastError = err instanceof Error ? err : new Error(String(err));
     }
 
-    // Step b: createImageBitmap without options
+    // Step b: createImageBitmap without options (preserves natural aspect ratio on canvas)
     try {
-      const bmp = await createImageBitmap(blob);
+      const bmp = await (createImageBitmap as any)(blob, {
+        imageOrientation: 'from-image'
+      });
       return {
         source: bmp,
         width: bmp.width,
@@ -227,10 +252,12 @@ export async function decodeImageWithFallbacks(
       });
       const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
 
-      // Decode converted JPEG
+      // Decode converted JPEG with imageOrientation: 'from-image'
       if (typeof createImageBitmap === 'function') {
         try {
-          const bmp = await createImageBitmap(jpegBlob);
+          const bmp = await (createImageBitmap as any)(jpegBlob, {
+            imageOrientation: 'from-image'
+          });
           return {
             source: bmp,
             width: bmp.width,
@@ -346,7 +373,7 @@ export async function compressImage(
   let formatInfo = options.formatInfo;
   if (!formatInfo) {
     try {
-      const slice = input.slice(0, 64);
+      const slice = input.slice(0, 131072);
       const headerBytes = new Uint8Array(await slice.arrayBuffer());
       formatInfo = detectImageFormatFromBuffer(headerBytes);
       if (

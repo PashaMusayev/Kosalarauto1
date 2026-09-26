@@ -122,11 +122,123 @@ export function detectImageFormatFromBuffer(buffer: ArrayBuffer | Uint8Array): I
   };
 }
 
+export interface HeaderDimensions {
+  width: number;
+  height: number;
+  storedWidth?: number;
+  storedHeight?: number;
+  orientation?: number | null;
+  isRotated?: boolean;
+}
+
+/**
+ * Reads the EXIF Orientation tag (0x0112) from JPEG bytes.
+ * Walks JPEG segments (APP1, APP2, DQT, DHT, SOF, etc.) by their 16-bit big-endian length.
+ * Handles both Big-Endian ('MM', 0x4D4D) and Little-Endian ('II', 0x4949) TIFF headers.
+ * Returns orientation (1-8) or null if not present or invalid.
+ */
+export function getJpegExifOrientation(bytes: Uint8Array): number | null {
+  if (!bytes || bytes.length < 14) return null;
+
+  // Must start with JPEG SOI marker: FF D8
+  if (bytes[0] !== 0xFF || bytes[1] !== 0xD8) return null;
+
+  try {
+    const len = bytes.length;
+    let offset = 2;
+
+    while (offset < len - 4) {
+      if (bytes[offset] !== 0xFF) {
+        offset++;
+        continue;
+      }
+
+      const marker = bytes[offset + 1];
+
+      // Standalone markers without length: SOI (D8), EOI (D9), RSTn (D0-D7)
+      if (marker === 0xD8 || marker === 0xD9 || (marker >= 0xD0 && marker <= 0xD7)) {
+        offset += 2;
+        continue;
+      }
+
+      // Stop on SOS (Start of Scan 0xDA) or null marker
+      if (marker === 0xDA || marker === 0x00) break;
+
+      if (offset + 4 > len) break;
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const segmentLen = view.getUint16(offset + 2, false);
+      if (segmentLen < 2) break;
+
+      // APP1 segment: 0xFF, 0xE1 (EXIF metadata)
+      if (marker === 0xE1) {
+        const app1Start = offset + 4;
+        const app1End = Math.min(len, offset + 2 + segmentLen);
+
+        // Verify 'Exif\0\0' prefix (6 bytes)
+        if (
+          app1Start + 6 <= app1End &&
+          bytes[app1Start] === 0x45 &&     // 'E'
+          bytes[app1Start + 1] === 0x78 && // 'x'
+          bytes[app1Start + 2] === 0x69 && // 'i'
+          bytes[app1Start + 3] === 0x66 && // 'f'
+          bytes[app1Start + 4] === 0x00 &&
+          bytes[app1Start + 5] === 0x00
+        ) {
+          const tiffStart = app1Start + 6;
+          if (tiffStart + 8 <= app1End) {
+            // TIFF header byte order: II (0x4949 = Little Endian) or MM (0x4D4D = Big Endian)
+            const byteOrder = view.getUint16(tiffStart, false);
+            let isLittleEndian: boolean;
+            if (byteOrder === 0x4949) {
+              isLittleEndian = true;
+            } else if (byteOrder === 0x4D4D) {
+              isLittleEndian = false;
+            } else {
+              offset += 2 + segmentLen;
+              continue;
+            }
+
+            // Verify TIFF magic number: 0x002A (42)
+            const tiffMagic = view.getUint16(tiffStart + 2, isLittleEndian);
+            if (tiffMagic === 42) {
+              const ifd0Offset = view.getUint32(tiffStart + 4, isLittleEndian);
+              const ifd0Start = tiffStart + ifd0Offset;
+
+              if (ifd0Start + 2 <= app1End) {
+                const numEntries = view.getUint16(ifd0Start, isLittleEndian);
+                let entryOffset = ifd0Start + 2;
+
+                for (let i = 0; i < numEntries && entryOffset + 12 <= app1End; i++, entryOffset += 12) {
+                  const tag = view.getUint16(entryOffset, isLittleEndian);
+                  if (tag === 0x0112) { // Orientation tag
+                    const orientation = view.getUint16(entryOffset + 8, isLittleEndian);
+                    if (orientation >= 1 && orientation <= 8) {
+                      return orientation;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      offset += 2 + segmentLen;
+    }
+  } catch (e) {
+    // Non-fatal parse warning
+  }
+
+  return null;
+}
+
 /**
  * Fast header dimension parser for JPEG, PNG, GIF, and WebP.
- * Allows pre-calculating resize dimensions before calling createImageBitmap.
+ * Fully respects EXIF orientation:
+ * If a JPEG has Orientation 5, 6, 7, or 8 (90° or 270° rotation),
+ * the output width and height are swapped to reflect the true DISPLAY / ORIENTED dimensions.
  */
-export function getImageDimensionsFromHeader(bytes: Uint8Array): { width: number; height: number } | null {
+export function getImageDimensionsFromHeader(bytes: Uint8Array): HeaderDimensions | null {
   if (!bytes || bytes.length < 16) return null;
 
   try {
@@ -136,7 +248,16 @@ export function getImageDimensionsFromHeader(bytes: Uint8Array): { width: number
         const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
         const width = view.getUint32(16, false);
         const height = view.getUint32(20, false);
-        if (width > 0 && height > 0) return { width, height };
+        if (width > 0 && height > 0) {
+          return {
+            width,
+            height,
+            storedWidth: width,
+            storedHeight: height,
+            orientation: 1,
+            isRotated: false
+          };
+        }
       }
     }
 
@@ -146,11 +267,49 @@ export function getImageDimensionsFromHeader(bytes: Uint8Array): { width: number
         const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
         const width = view.getUint16(6, true);
         const height = view.getUint16(8, true);
-        if (width > 0 && height > 0) return { width, height };
+        if (width > 0 && height > 0) {
+          return {
+            width,
+            height,
+            storedWidth: width,
+            storedHeight: height,
+            orientation: 1,
+            isRotated: false
+          };
+        }
       }
     }
 
-    // JPEG: Scan for SOF markers (SOF0: 0xFFC0, SOF1: 0xFFC1, SOF2: 0xFFC2)
+    // WebP: RIFF....WEBP
+    if (
+      bytes.length >= 30 &&
+      bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+    ) {
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+      // VP8X (Extended WebP)
+      if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x58 && bytes.length >= 30) {
+        const width = 1 + view.getUint8(24) + (view.getUint8(25) << 8) + (view.getUint8(26) << 16);
+        const height = 1 + view.getUint8(27) + (view.getUint8(28) << 8) + (view.getUint8(29) << 16);
+        if (width > 0 && height > 0) {
+          return { width, height, storedWidth: width, storedHeight: height, orientation: 1, isRotated: false };
+        }
+      }
+
+      // VP8 (Simple lossy WebP)
+      if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x20 && bytes.length >= 30) {
+        if (bytes[23] === 0x9D && bytes[24] === 0x01 && bytes[25] === 0x2A) {
+          const width = view.getUint16(26, true) & 0x3FFF;
+          const height = view.getUint16(28, true) & 0x3FFF;
+          if (width > 0 && height > 0) {
+            return { width, height, storedWidth: width, storedHeight: height, orientation: 1, isRotated: false };
+          }
+        }
+      }
+    }
+
+    // JPEG: Scan for SOF markers (SOF0: 0xFFC0, SOF1: 0xFFC1, SOF2: 0xFFC2, etc.)
     if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
       let offset = 2;
       const len = bytes.length;
@@ -164,6 +323,7 @@ export function getImageDimensionsFromHeader(bytes: Uint8Array): { width: number
           offset += 2;
           continue;
         }
+        if (marker === 0xDA || marker === 0x00) break; // Start of Scan (SOS)
         if (offset + 4 > len) break;
         const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
         const segmentLen = view.getUint16(offset + 2, false);
@@ -176,9 +336,22 @@ export function getImageDimensionsFromHeader(bytes: Uint8Array): { width: number
           (marker >= 0xCD && marker <= 0xCF);
 
         if (isSof && offset + 9 <= len) {
-          const height = view.getUint16(offset + 5, false);
-          const width = view.getUint16(offset + 7, false);
-          if (width > 0 && height > 0) return { width, height };
+          const storedHeight = view.getUint16(offset + 5, false);
+          const storedWidth = view.getUint16(offset + 7, false);
+          if (storedWidth > 0 && storedHeight > 0) {
+            // Check EXIF orientation
+            const orientation = getJpegExifOrientation(bytes);
+            // Orientations 5, 6, 7, 8 require swapping width and height for display/target calculations
+            const isRotated = orientation === 5 || orientation === 6 || orientation === 7 || orientation === 8;
+            return {
+              width: isRotated ? storedHeight : storedWidth,
+              height: isRotated ? storedWidth : storedHeight,
+              storedWidth,
+              storedHeight,
+              orientation,
+              isRotated
+            };
+          }
         }
 
         offset += 2 + segmentLen;
