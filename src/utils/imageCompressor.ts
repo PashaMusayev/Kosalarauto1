@@ -153,8 +153,42 @@ export interface DecodedImageSource {
 }
 
 /**
+ * Determines a single constraining dimension for createImageBitmap resize options.
+ * 
+ * Passing only ONE resize dimension (the constraining one) lets the browser derive the
+ * other dimension according to how it actually decodes and orients the image.
+ * This ensures that if a browser ignores EXIF orientation, the resulting bitmap aspect ratio
+ * will diverge from the expected aspect ratio, allowing the safety check to detect distortion.
+ * 
+ * - Portrait (taller): passes only resizeHeight
+ * - Landscape (wider): passes only resizeWidth
+ * - Square (equal): passes one dimension (resizeWidth)
+ * - Smaller than max: passes neither (no upscaling)
+ */
+export function getSingleResizeDimension(
+  width: number,
+  height: number,
+  maxW = 1200,
+  maxH = 1200
+): { resizeWidth?: number; resizeHeight?: number } {
+  // If the image is smaller than or equal to the max bounds, do not upscale
+  if (width <= maxW && height <= maxH) {
+    return {};
+  }
+
+  // Constraining dimension:
+  // If height / maxH > width / maxW, height is more constraining (e.g. portrait)
+  if (height / maxH > width / maxW) {
+    return { resizeHeight: maxH };
+  } else {
+    // Width is more constraining (or equal, e.g. landscape or square)
+    return { resizeWidth: maxW };
+  }
+}
+
+/**
  * Layered decoding pipeline with fallbacks:
- * a. createImageBitmap with resizeWidth/resizeHeight (memory efficient for 108MP+)
+ * a. createImageBitmap with single-dimension resize (memory efficient for 108MP+)
  * b. createImageBitmap without options
  * c. HTMLImageElement via object URL (native browser decoder)
  * d. HEIC/HEIF fallback via dynamically imported heic2any inside admin
@@ -167,7 +201,7 @@ export async function decodeImageWithFallbacks(
 ): Promise<DecodedImageSource> {
   let lastError: Error | null = null;
 
-  // Step a: createImageBitmap with resize options
+  // Step a: createImageBitmap with single constraining resize dimension
   if (typeof createImageBitmap === 'function') {
     try {
       const canResize = await supportsCreateImageBitmapResize();
@@ -177,17 +211,25 @@ export async function decodeImageWithFallbacks(
         const headerBytes = new Uint8Array(await slice.arrayBuffer());
         const dims = getImageDimensionsFromHeader(headerBytes);
         if (dims && dims.width > 0 && dims.height > 0) {
-          const target = calculateTargetDimensions(dims.width, dims.height, maxW, maxH);
-          const bmp = await (createImageBitmap as any)(blob, {
-            resizeWidth: target.width,
-            resizeHeight: target.height,
+          const singleDim = getSingleResizeDimension(dims.width, dims.height, maxW, maxH);
+          const resizeOptions: any = {
             resizeQuality: 'high',
             imageOrientation: 'from-image'
-          });
+          };
+          if (singleDim.resizeWidth) {
+            resizeOptions.resizeWidth = singleDim.resizeWidth;
+          }
+          if (singleDim.resizeHeight) {
+            resizeOptions.resizeHeight = singleDim.resizeHeight;
+          }
+
+          const bmp = await (createImageBitmap as any)(blob, resizeOptions);
 
           // Safety check (defense in depth):
           // Compare actual bitmap aspect ratio (width/height) to the expected aspect ratio of the oriented source.
-          // If they differ by more than ~2%, discard that bitmap and fall back to the next decode path.
+          // Because only ONE constraining dimension was passed, the browser derived the other dimension.
+          // If the browser oriented the image differently than expected (e.g. ignored orientation),
+          // actualAspect and expectedAspect will diverge by ~78%, the check fires, and we fall back to Step b.
           const expectedAspect = dims.width / dims.height;
           const actualAspect = bmp.width / bmp.height;
           const aspectDiff = Math.abs(actualAspect - expectedAspect) / expectedAspect;

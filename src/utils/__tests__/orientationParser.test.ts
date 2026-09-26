@@ -10,6 +10,7 @@
  */
 
 import { getJpegExifOrientation, getImageDimensionsFromHeader } from '../imageFormatDetector';
+import { getSingleResizeDimension } from '../imageCompressor';
 
 interface CreateJpegOptions {
   byteOrder?: 'MM' | 'II';
@@ -231,6 +232,64 @@ function runTests() {
       'Orientation 3 preserves 4000x3000',
       dims3?.width === 4000 && dims3?.height === 3000 && dims3?.isRotated === false,
       JSON.stringify(dims3)
+    );
+  }
+
+  // Test 7: Dimension-selection logic for single-dimension createImageBitmap resize
+  // 1. Portrait (3000x4000) -> only resizeHeight 1200
+  {
+    const portraitDims = getSingleResizeDimension(3000, 4000, 1200, 1200);
+    assert(
+      'Portrait (3000x4000) -> only resizeHeight 1200',
+      portraitDims.resizeHeight === 1200 && portraitDims.resizeWidth === undefined,
+      `Got ${JSON.stringify(portraitDims)}`
+    );
+  }
+
+  // 2. Landscape (4000x3000) -> only resizeWidth 1200
+  {
+    const landscapeDims = getSingleResizeDimension(4000, 3000, 1200, 1200);
+    assert(
+      'Landscape (4000x3000) -> only resizeWidth 1200',
+      landscapeDims.resizeWidth === 1200 && landscapeDims.resizeHeight === undefined,
+      `Got ${JSON.stringify(landscapeDims)}`
+    );
+  }
+
+  // 3. Square (2000x2000) -> one dimension
+  {
+    const squareDims = getSingleResizeDimension(2000, 2000, 1200, 1200);
+    const hasExactlyOneDimension =
+      (squareDims.resizeWidth !== undefined && squareDims.resizeHeight === undefined) ||
+      (squareDims.resizeHeight !== undefined && squareDims.resizeWidth === undefined);
+    assert(
+      'Square (2000x2000) -> exactly one dimension (1200)',
+      hasExactlyOneDimension && (squareDims.resizeWidth === 1200 || squareDims.resizeHeight === 1200),
+      `Got ${JSON.stringify(squareDims)}`
+    );
+  }
+
+  // 4. Image smaller than the max -> no upscaling
+  {
+    const smallLandscape = getSingleResizeDimension(800, 600, 1200, 1200);
+    assert(
+      'Smaller landscape (800x600) -> no upscaling',
+      smallLandscape.resizeWidth === undefined && smallLandscape.resizeHeight === undefined,
+      `Got ${JSON.stringify(smallLandscape)}`
+    );
+
+    const smallPortrait = getSingleResizeDimension(600, 800, 1200, 1200);
+    assert(
+      'Smaller portrait (600x800) -> no upscaling',
+      smallPortrait.resizeWidth === undefined && smallPortrait.resizeHeight === undefined,
+      `Got ${JSON.stringify(smallPortrait)}`
+    );
+
+    const exactMax = getSingleResizeDimension(1200, 1200, 1200, 1200);
+    assert(
+      'Exact max (1200x1200) -> no upscaling',
+      exactMax.resizeWidth === undefined && exactMax.resizeHeight === undefined,
+      `Got ${JSON.stringify(exactMax)}`
     );
   }
 
